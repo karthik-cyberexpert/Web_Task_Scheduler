@@ -3,6 +3,7 @@ import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut as authSignOut } from "firebase/auth";
 import { supabase } from "../supabaseClient";
 import { SpotlightCard, ShinyText, CountUp, BlurReveal } from "./reactbits";
+import { sendGreetingEmail } from "../utils/email";
 
 
 interface AdminDashboardProps {
@@ -476,7 +477,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           throw new Error(insertErr.message);
         }
 
-        onShowToast(`User "${newUserName.trim()}" created successfully!`, "success");
+        const emailRes = await sendGreetingEmail({
+          toEmail: newUserEmail.trim(),
+          toName: newUserName.trim(),
+          username: usernameClean,
+          password: "user@sydions",
+        });
+
+        if (emailRes.success) {
+          onShowToast(`User "${newUserName.trim()}" created and greeting email sent!`, "success");
+        } else if (emailRes.message.includes("not configured")) {
+          onShowToast(`User "${newUserName.trim()}" created successfully!`, "success");
+        } else {
+          onShowToast(`User created but welcome email failed: ${emailRes.message}`, "error");
+        }
       }
 
       setNewUserName("");
