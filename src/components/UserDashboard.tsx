@@ -311,7 +311,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         const fileName = `${currentUser.uid}-${Date.now()}.${fileExt}`;
         const filePath = `${fileName}`;
 
-        const { data: uploadData, error: uploadErr } = await supabase.storage
+        const { error: uploadErr } = await supabase.storage
           .from("task-attachments")
           .upload(filePath, subFile);
 
