@@ -105,6 +105,7 @@ const renderSubmissionContent = (content: string) => {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, currentUser, onBackToUser }) => {
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "users" | "leaderboard">("overview");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [taskStep, setTaskStep] = useState(1);
@@ -926,6 +927,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     <div className="app-wrapper">
       <header className="app-navbar">
         <div className="brand-section">
+          <button 
+            className="hamburger-btn" 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle Navigation Menu"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              {isMobileMenuOpen ? (
+                <path d="M18 6L6 18M6 6l12 12" />
+              ) : (
+                <path d="M3 12h18M3 6h18M3 18h18" />
+              )}
+            </svg>
+          </button>
           <div className="brand-logo">
             <ShinyText text="Sydions Portal" speed={3.5} />
           </div>
@@ -939,13 +953,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
         </div>
       </header>
 
+      {isMobileMenuOpen && (
+        <div 
+          className="sidebar-backdrop" 
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       <div className="dashboard-layout">
         {/* Persistent Side Navigation */}
-        <aside className="dashboard-sidebar">
+        <aside className={`dashboard-sidebar ${isMobileMenuOpen ? "open" : ""}`}>
           <div className="sidebar-nav">
             <button
               className={`sidebar-nav-item ${activeTab === "overview" ? "active" : ""}`}
-              onClick={() => setActiveTab("overview")}
+              onClick={() => {
+                setActiveTab("overview");
+                setIsMobileMenuOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <rect x="3" y="3" width="7" height="7" />
@@ -957,7 +981,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "tasks" ? "active" : ""}`}
-              onClick={() => setActiveTab("tasks")}
+              onClick={() => {
+                setActiveTab("tasks");
+                setIsMobileMenuOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -969,7 +996,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "users" ? "active" : ""}`}
-              onClick={() => setActiveTab("users")}
+              onClick={() => {
+                setActiveTab("users");
+                setIsMobileMenuOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -981,7 +1011,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "leaderboard" ? "active" : ""}`}
-              onClick={() => setActiveTab("leaderboard")}
+              onClick={() => {
+                setActiveTab("leaderboard");
+                setIsMobileMenuOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -992,7 +1025,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           </div>
 
           <div className="sidebar-footer">
-            <button className="btn btn-secondary btn-block btn-sm" onClick={onBackToUser}>
+            <button className="btn btn-secondary btn-block btn-sm" onClick={() => {
+              onBackToUser();
+              setIsMobileMenuOpen(false);
+            }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: "0.25rem" }}>
                 <polyline points="15 18 9 12 15 6" />
               </svg>

@@ -207,6 +207,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 }) => {
   // Navigation tabs: overview, tasks, history, leaderboard
   const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "history" | "leaderboard">("overview");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [submissionContent, setSubmissionContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -515,6 +516,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     <div className="app-wrapper">
       <header className="app-navbar">
         <div className="brand-section">
+          <button 
+            className="hamburger-btn" 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle Navigation Menu"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              {isMobileMenuOpen ? (
+                <path d="M18 6L6 18M6 6l12 12" />
+              ) : (
+                <path d="M3 12h18M3 6h18M3 18h18" />
+              )}
+            </svg>
+          </button>
           <div className="brand-logo">
             <ShinyText text="Sydions Portal" speed={3.5} />
           </div>
@@ -528,13 +542,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       </header>
 
+      {isMobileMenuOpen && (
+        <div 
+          className="sidebar-backdrop" 
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       <div className="dashboard-layout">
         {/* Persistent Side Navigation */}
-        <aside className="dashboard-sidebar">
+        <aside className={`dashboard-sidebar ${isMobileMenuOpen ? "open" : ""}`}>
           <div className="sidebar-nav">
             <button
               className={`sidebar-nav-item ${activeTab === "overview" ? "active" : ""}`}
-              onClick={() => setActiveTab("overview")}
+              onClick={() => {
+                setActiveTab("overview");
+                setIsMobileMenuOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <rect x="3" y="3" width="7" height="7" />
@@ -546,7 +570,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "tasks" ? "active" : ""}`}
-              onClick={() => setActiveTab("tasks")}
+              onClick={() => {
+                setActiveTab("tasks");
+                setIsMobileMenuOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -558,7 +585,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "history" ? "active" : ""}`}
-              onClick={() => setActiveTab("history")}
+              onClick={() => {
+                setActiveTab("history");
+                setIsMobileMenuOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M12 8v4l3 3" />
@@ -568,7 +598,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "leaderboard" ? "active" : ""}`}
-              onClick={() => setActiveTab("leaderboard")}
+              onClick={() => {
+                setActiveTab("leaderboard");
+                setIsMobileMenuOpen(false);
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -578,7 +611,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             {userProfile?.role === "admin" && onNavigateToAdmin && (
               <button
                 className="sidebar-nav-item"
-                onClick={onNavigateToAdmin}
+                onClick={() => {
+                  onNavigateToAdmin();
+                  setIsMobileMenuOpen(false);
+                }}
                 style={{
                   color: "var(--primary-hover)",
                   fontWeight: "bold",
@@ -596,7 +632,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
 
           <div className="sidebar-footer">
-            <button className="btn btn-secondary btn-block btn-sm" onClick={handleLogout}>
+            <button className="btn btn-secondary btn-block btn-sm" onClick={() => {
+              handleLogout();
+              setIsMobileMenuOpen(false);
+            }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: "0.25rem" }}>
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
               </svg>
@@ -619,7 +658,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     <h2>
                       <BlurReveal text={`Welcome back, ${userProfile?.name || "User"}`} duration={0.8} />
                     </h2>
-                    <p>Profile Account: {currentUser.email} | Rank Badge: #{typeof userRank === 'number' ? <CountUp to={userRank} duration={0.8} /> : userRank}</p>
+                    <p className="welcome-subtitle">
+                      <span className="subtitle-email">Profile Account: {currentUser.email}</span>
+                      <span className="subtitle-divider"> | </span>
+                      <span className="subtitle-rank">Rank Badge: #{typeof userRank === 'number' ? <CountUp to={userRank} duration={0.8} /> : userRank}</span>
+                    </p>
                   </div>
                 </div>
                 <div className="profile-xp-total" style={{ fontSize: "1.1rem" }}>
