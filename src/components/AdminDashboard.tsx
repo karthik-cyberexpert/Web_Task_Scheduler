@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { initializeApp, deleteApp } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as authSignOut } from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser, signOut as authSignOut } from "firebase/auth";
 import { supabase } from "../supabaseClient";
 import { SpotlightCard, ShinyText, CountUp, BlurReveal } from "./reactbits";
 import { sendGreetingEmail, sendTaskAssignmentEmail } from "../utils/email";
@@ -494,12 +494,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           }
         }
 
-        // Log out of the secondary app instance
+        // Log out of the secondary app instance and clean up
         await authSignOut(secondaryAuth);
-        await deleteApp(secondaryApp);
+        try { await deleteApp(secondaryApp); } catch (_) {}
+        secondaryApp = null;
 
-        // Store in Supabase users table with onboarding false
-        const { error: insertErr } = await supabase.from("users").insert({
+        // Store in Supabase users table (upsert to handle re-registration of previously deleted users)
+        const { error: insertErr } = await supabase.from("users").upsert({
           uid: createdUser.uid,
           email: newUserEmail.trim().toLowerCase(),
           username: usernameClean,
@@ -508,7 +509,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           xp: 0,
           onboarding: false,
           created_at: new Date().toISOString(),
-        });
+        }, { onConflict: "uid" });
 
         if (insertErr) {
           throw new Error(insertErr.message);
@@ -535,12 +536,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       setNewUserEmail("");
       setNewUserRole("user");
       setEditingUser(null);
-      setIsUserModalOpen(false); // Close the modal
+      setIsUserModalOpen(false);
     } catch (err: any) {
       console.error(err);
       let errMsg = err.message || "Failed to save user.";
       if (err.code === "auth/email-already-in-use") {
-        errMsg = "This email address is already in use.";
+        errMsg = "This email address is already registered in Firebase. Please use a different email.";
       }
       onShowToast(errMsg, "error");
       if (secondaryApp) {
@@ -562,24 +563,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     setIsUserModalOpen(true);
   };
 
-  const handleDeleteUser = async (uid: string) => {
+  const handleDeleteUser = async (uid: string, email: string) => {
     if (uid === currentUser.uid) {
       onShowToast("You cannot delete your own admin account.", "error");
       return;
     }
-    if (!window.confirm("Are you sure you want to delete this user? This will delete all of their task submissions as well.")) return;
+    if (!window.confirm("Are you sure you want to delete this user? This will permanently remove their account and all task submissions.")) return;
+
+    let tempApp;
     try {
+      // Delete from Supabase first
       const { error } = await supabase
         .from("users")
         .delete()
         .eq("uid", uid);
-      
+
       if (error) throw error;
+
+      // Delete from Firebase Auth by signing into their account and self-deleting
+      try {
+        const tempAppName = "DeleteApp-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+        tempApp = initializeApp(
+          {
+            apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+            authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+            projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+            storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+            messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+            appId: import.meta.env.VITE_FIREBASE_APP_ID,
+            measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+          },
+          tempAppName
+        );
+        const tempAuth = getAuth(tempApp);
+        const cred = await signInWithEmailAndPassword(tempAuth, email, "user@sydions");
+        await deleteUser(cred.user);
+        try { await deleteApp(tempApp); } catch (_) {}
+        tempApp = null;
+      } catch (firebaseErr) {
+        console.error("Could not delete Firebase Auth account (user may have changed password):", firebaseErr);
+        if (tempApp) {
+          try { await deleteApp(tempApp); } catch (_) {}
+        }
+      }
+
       onShowToast("User deleted successfully!", "success");
       fetchUsers();
     } catch (err: any) {
       console.error("Error deleting user:", err);
       onShowToast(err.message || "Failed to delete user.", "error");
+      if (tempApp) {
+        try { await deleteApp(tempApp); } catch (_) {}
+      }
     }
   };
 
@@ -1283,7 +1318,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                                 type="button"
                                 className="action-icon-btn delete-btn"
                                 title="Delete User"
-                                onClick={() => handleDeleteUser(user.uid)}
+                                onClick={() => handleDeleteUser(user.uid, user.email)}
                               >
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="3 6 5 6 21 6" />
