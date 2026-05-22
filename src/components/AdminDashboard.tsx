@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { initializeApp, deleteApp } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser, signOut as authSignOut } from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as authSignOut } from "firebase/auth";
 import { supabase } from "../supabaseClient";
 import { SpotlightCard, ShinyText, CountUp, BlurReveal } from "./reactbits";
 import { sendGreetingEmail, sendTaskAssignmentEmail } from "../utils/email";
