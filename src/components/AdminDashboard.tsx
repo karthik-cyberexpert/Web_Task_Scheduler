@@ -436,7 +436,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           return;
         }
 
+        // Check for duplicate email in Supabase
+        const { data: existingEmailUser, error: emailCheckErr } = await supabase
+          .from("users")
+          .select("uid")
+          .eq("email", newUserEmail.trim().toLowerCase())
+          .maybeSingle();
+
+        if (emailCheckErr) {
+          console.error("Error checking email uniqueness:", emailCheckErr);
+        }
+
+        if (existingEmailUser) {
+          onShowToast("This email address is already registered in the system.", "error");
+          setUserCreating(false);
+          return;
+        }
+
         // Secondary App settings to avoid logging out the admin
+        const secondaryAppName = "SecondaryApp-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
         secondaryApp = initializeApp(
           {
             apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -447,7 +465,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             appId: import.meta.env.VITE_FIREBASE_APP_ID,
             measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
           },
-          "SecondaryApp"
+          secondaryAppName
         );
 
         const secondaryAuth = getAuth(secondaryApp);
