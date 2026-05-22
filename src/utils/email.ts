@@ -17,15 +17,21 @@ export const sendMail = async (payload: MailPayload): Promise<{ success: boolean
   // 1. Try sending via Firebase Trigger Email extension (writes to 'mail' collection)
   try {
     if (db) {
-      await addDoc(collection(db, "mail"), {
-        to: payload.toEmail,
-        message: {
-          subject: payload.subject,
-          text: payload.textBody,
-          html: payload.htmlBody || payload.textBody.replace(/\n/g, "<br>"),
-        },
-        created_at: new Date().toISOString(),
-      });
+      const timeoutMs = 5000;
+      await Promise.race([
+        addDoc(collection(db, "mail"), {
+          to: payload.toEmail,
+          message: {
+            subject: payload.subject,
+            text: payload.textBody,
+            html: payload.htmlBody || payload.textBody.replace(/\n/g, "<br>"),
+          },
+          created_at: new Date().toISOString(),
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Firebase Firestore write timed out")), timeoutMs)
+        ),
+      ]);
       firebaseSuccess = true;
     }
   } catch (err: any) {
