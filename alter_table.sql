@@ -60,6 +60,10 @@ DROP POLICY IF EXISTS "Enable update access for all users" ON public.users;
 CREATE POLICY "Enable update access for all users" ON public.users
     FOR UPDATE USING (true);
 
+DROP POLICY IF EXISTS "Enable delete access for all users" ON public.users;
+CREATE POLICY "Enable delete access for all users" ON public.users
+    FOR DELETE USING (true);
+
 -- 4. RLS Policies for public.tasks
 DROP POLICY IF EXISTS "Enable read access for all tasks" ON public.tasks;
 CREATE POLICY "Enable read access for all tasks" ON public.tasks
@@ -73,6 +77,10 @@ DROP POLICY IF EXISTS "Enable update access for all tasks" ON public.tasks;
 CREATE POLICY "Enable update access for all tasks" ON public.tasks
     FOR UPDATE USING (true);
 
+DROP POLICY IF EXISTS "Enable delete access for all tasks" ON public.tasks;
+CREATE POLICY "Enable delete access for all tasks" ON public.tasks
+    FOR DELETE USING (true);
+
 -- 5. RLS Policies for public.submissions
 DROP POLICY IF EXISTS "Enable read access for all submissions" ON public.submissions;
 CREATE POLICY "Enable read access for all submissions" ON public.submissions
@@ -85,6 +93,10 @@ CREATE POLICY "Enable insert access for all submissions" ON public.submissions
 DROP POLICY IF EXISTS "Enable update access for all submissions" ON public.submissions;
 CREATE POLICY "Enable update access for all submissions" ON public.submissions
     FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Enable delete access for all submissions" ON public.submissions;
+CREATE POLICY "Enable delete access for all submissions" ON public.submissions
+    FOR DELETE USING (true);
 
 -- 6. Enable Realtime subscriptions
 -- (Note: If these publications already exist or fail, they can be safely ignored)

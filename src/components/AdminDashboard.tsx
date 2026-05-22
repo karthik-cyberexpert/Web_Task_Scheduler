@@ -3,7 +3,8 @@ import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut as authSignOut } from "firebase/auth";
 import { supabase } from "../supabaseClient";
 import { SpotlightCard, ShinyText, CountUp, BlurReveal } from "./reactbits";
-import { sendGreetingEmail } from "../utils/email";
+import { sendGreetingEmail, sendTaskAssignmentEmail } from "../utils/email";
+
 
 
 interface AdminDashboardProps {
@@ -614,6 +615,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
         }
 
         onShowToast("Task created and assigned successfully!", "success");
+
+        // Trigger task assignment emails asynchronously to avoid blocking the UI
+        try {
+          const taskTitleVal = taskTitle.trim();
+          const deadlineStr = new Date(taskDeadline).toLocaleString();
+          let usersToNotify: { email: string; name: string }[] = [];
+
+          if (taskAssignedType === "all") {
+            const { data: usersData } = await supabase
+              .from("users")
+              .select("email, name")
+              .neq("role", "admin");
+            if (usersData) {
+              usersToNotify = usersData;
+            }
+          } else {
+            const { data: usersData } = await supabase
+              .from("users")
+              .select("email, name")
+              .in("uid", selectedUserIds);
+            if (usersData) {
+              usersToNotify = usersData;
+            }
+          }
+
+          usersToNotify.forEach(async (u) => {
+            if (u.email) {
+              try {
+                await sendTaskAssignmentEmail({
+                  toEmail: u.email,
+                  toName: u.name || "User",
+                  taskTitle: taskTitleVal,
+                  taskDeadline: deadlineStr,
+                });
+              } catch (mailErr) {
+                console.error(`Failed to send task email to ${u.email}:`, mailErr);
+              }
+            }
+          });
+        } catch (emailTriggerErr) {
+          console.error("Error triggering assignment emails:", emailTriggerErr);
+        }
       }
 
       setTaskTitle("");

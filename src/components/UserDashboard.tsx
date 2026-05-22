@@ -3,6 +3,7 @@ import { signOut as authSignOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { supabase } from "../supabaseClient";
 import { SpotlightCard, ShinyText, CountUp, BlurReveal } from "./reactbits";
+import { sendDeadlineReminder } from "../utils/email";
 
 
 interface UserDashboardProps {
@@ -279,6 +280,91 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       supabase.removeChannel(submissionsChannel);
     };
   }, [currentUser.uid]);
+
+  // Hook to check for and trigger approaching task deadline emails
+  useEffect(() => {
+    if (!currentUser?.uid || allTasks.length === 0) return;
+
+    const checkDeadlineReminders = async () => {
+      const now = new Date();
+      
+      // Filter tasks assigned to current user
+      const userTasks = allTasks.filter((task) => {
+        if (task.assignedType === "all") return true;
+        return task.assignedUsers?.includes(currentUser.uid);
+      });
+
+      for (const task of userTasks) {
+        // Check if user has already submitted (approved or pending)
+        const hasSubmitted = mySubmissions.some(
+          (sub) => sub.taskId === task.id && (sub.status === "approved" || sub.status === "pending")
+        );
+        if (hasSubmitted) continue;
+
+        const deadlineDate = task.deadline?.toDate ? task.deadline.toDate() : new Date(task.deadline);
+        const msRemaining = deadlineDate.getTime() - now.getTime();
+        const hoursRemaining = msRemaining / (1000 * 60 * 60);
+
+        // 'before_day' reminder: deadline is tomorrow (between 24 and 48 hours away)
+        // 'on_day' reminder: deadline is today (within 24 hours)
+        let reminderType: "before_day" | "on_day" | null = null;
+        if (hoursRemaining > 0 && hoursRemaining <= 24) {
+          reminderType = "on_day";
+        } else if (hoursRemaining > 24 && hoursRemaining <= 48) {
+          reminderType = "before_day";
+        }
+
+        if (!reminderType) continue;
+
+        try {
+          // Check if this specific reminder has already been sent
+          const { data: sentList, error: checkError } = await supabase
+            .from("sent_reminders")
+            .select("id")
+            .eq("task_id", task.id)
+            .eq("user_id", currentUser.uid)
+            .eq("reminder_type", reminderType);
+
+          if (checkError) {
+            console.error("Error checking sent reminders:", checkError);
+            continue;
+          }
+
+          if (sentList && sentList.length > 0) {
+            continue;
+          }
+
+          // Queue the reminder email
+          const emailRes = await sendDeadlineReminder({
+            toEmail: currentUser.email,
+            toName: userProfile?.name || currentUser.email,
+            taskTitle: task.title,
+            taskDeadline: deadlineDate.toLocaleString(),
+            reminderType,
+          });
+
+          if (emailRes.success) {
+            // Log that the reminder has been sent
+            const { error: insertError } = await supabase
+              .from("sent_reminders")
+              .insert({
+                task_id: task.id,
+                user_id: currentUser.uid,
+                reminder_type: reminderType,
+              });
+
+            if (insertError) {
+              console.error("Error recording sent reminder:", insertError);
+            }
+          }
+        } catch (err) {
+          console.error("Error checking/sending deadline reminder:", err);
+        }
+      }
+    };
+
+    checkDeadlineReminders();
+  }, [allTasks, mySubmissions, currentUser, userProfile]);
 
   // Handle task submission
   const handleTaskSubmit = async (e: React.FormEvent, task: any) => {
