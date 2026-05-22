@@ -52,6 +52,33 @@ const mapSubmission = (s: any) => ({
   reviewedAt: s.reviewed_at ? { toDate: () => new Date(s.reviewed_at) } : null
 });
 
+export const getAvatarGradient = (username: string) => {
+  const gradients = [
+    "linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)", // indigo to cyan
+    "linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)", // pink to purple
+    "linear-gradient(135deg, #10b981 0%, #3b82f6 100%)", // emerald to blue
+    "linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)", // amber to red
+    "linear-gradient(135deg, #84cc16 0%, #10b981 100%)", // lime to emerald
+    "linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)", // cyan to blue
+  ];
+  let hash = 0;
+  const str = username || "user";
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % gradients.length;
+  return gradients[index];
+};
+
+export const getInitials = (name: string) => {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+  }
+  return parts[0].substring(0, 2).toUpperCase();
+};
+
 const compressImage = async (file: File): Promise<File> => {
   return new Promise((resolve) => {
     if (!file.type.startsWith("image/")) {
@@ -866,52 +893,129 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <div className="dashboard-view-title" style={{ marginBottom: 0 }}>Platform Leaderboard</div>
               </div>
               <p className="dashboard-view-desc">Live ranking of all users based on earned EXP.</p>
+              {leaderboardList.length === 0 ? (
+                <div className="empty-placeholder" style={{ marginTop: '1.5rem' }}>No user rankings yet.</div>
+              ) : (
+                (() => {
+                  const top3 = leaderboardList.slice(0, 3);
+                  const remainingUsers = leaderboardList.slice(3);
+                  const firstUser = top3[0];
+                  const secondUser = top3[1];
+                  const thirdUser = top3[2];
 
-              <div className="leaderboard-list" style={{ marginTop: '1.5rem' }}>
-                {leaderboardList.length === 0 ? (
-                  <div className="empty-placeholder">No user rankings yet.</div>
-                ) : (
-                  leaderboardList.map((user, idx) => {
-                    const rank = idx + 1;
-                    const isCurrentUser = user.uid === currentUser.uid;
-                    return (
-                      <div
-                        key={user.uid}
-                        className="leaderboard-item"
-                        style={{
-                          padding: '1.25rem 1.5rem',
-                          background: isCurrentUser ? 'rgba(139, 92, 246, 0.05)' : 'var(--bg-base)',
-                          border: isCurrentUser ? '1px solid var(--primary)' : '1px solid var(--border-color)',
-                          borderRadius: 'var(--border-radius-md)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          marginBottom: '0.75rem',
-                          boxShadow: isCurrentUser ? '0 0 10px rgba(139, 92, 246, 0.15)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                          transition: 'transform 0.2s, box-shadow 0.2s'
-                        }}
-                      >
-                        <div className="leaderboard-profile-slot" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-                          <span className={`rank-badge rank-${rank <= 3 ? rank : ""}`} style={{ fontSize: '1.2rem', minWidth: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {rank}
-                          </span>
-                          <div className="leaderboard-user-details" style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span className="leaderboard-user-name" style={{ fontSize: '1.1rem', fontWeight: 600, color: isCurrentUser ? 'var(--primary)' : 'var(--text-primary)' }}>
-                              {user.name} {isCurrentUser && " (You)"}
-                            </span>
-                            <span className="leaderboard-user-email" style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                              @{user.username}
-                            </span>
-                          </div>
+                  return (
+                    <div className="leaderboard-container">
+                      {top3.length > 0 && (
+                        <div className="leaderboard-podium">
+                          {/* 2nd Place */}
+                          {secondUser && (
+                            <div className={`podium-card rank-2 ${secondUser.uid === currentUser.uid ? 'is-current-user' : ''}`}>
+                              <div className="podium-avatar-container">
+                                <div className="podium-avatar" style={{ background: getAvatarGradient(secondUser.username) }}>
+                                  {getInitials(secondUser.name)}
+                                </div>
+                                <div className="podium-avatar-badge">2</div>
+                              </div>
+                              <div className="podium-user-name" title={secondUser.name}>
+                                {secondUser.name}
+                              </div>
+                              <div className="podium-user-username">@{secondUser.username}</div>
+                              <div className="podium-xp">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }}>
+                                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                </svg>
+                                {secondUser.xp} EXP
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 1st Place */}
+                          {firstUser && (
+                            <div className={`podium-card rank-1 ${firstUser.uid === currentUser.uid ? 'is-current-user' : ''}`}>
+                              <div className="crown-container">
+                                <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }}>
+                                  <path d="M5 16L3 5l5 5 4-7 4 7 5-5-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/>
+                                </svg>
+                              </div>
+                              <div className="podium-avatar-container">
+                                <div className="podium-avatar" style={{ background: getAvatarGradient(firstUser.username) }}>
+                                  {getInitials(firstUser.name)}
+                                </div>
+                                <div className="podium-avatar-badge">1</div>
+                              </div>
+                              <div className="podium-user-name" title={firstUser.name}>
+                                {firstUser.name}
+                              </div>
+                              <div className="podium-user-username">@{firstUser.username}</div>
+                              <div className="podium-xp">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }}>
+                                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                </svg>
+                                {firstUser.xp} EXP
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 3rd Place */}
+                          {thirdUser && (
+                            <div className={`podium-card rank-3 ${thirdUser.uid === currentUser.uid ? 'is-current-user' : ''}`}>
+                              <div className="podium-avatar-container">
+                                <div className="podium-avatar" style={{ background: getAvatarGradient(thirdUser.username) }}>
+                                  {getInitials(thirdUser.name)}
+                                </div>
+                                <div className="podium-avatar-badge">3</div>
+                              </div>
+                              <div className="podium-user-name" title={thirdUser.name}>
+                                {thirdUser.name}
+                              </div>
+                              <div className="podium-user-username">@{thirdUser.username}</div>
+                              <div className="podium-xp">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }}>
+                                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                </svg>
+                                {thirdUser.xp} EXP
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="leaderboard-xp-badge" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-gold)', padding: '0.5rem 1rem', background: 'rgba(251,191,36,0.1)', borderRadius: 'var(--border-radius-full)' }}>
-                          {user.xp} EXP
+                      )}
+
+                      {/* Remaining Ranks */}
+                      {remainingUsers.length > 0 && (
+                        <div className="leaderboard-list-v2">
+                          {remainingUsers.map((user, idx) => {
+                            const rank = idx + 4;
+                            const isCurrentUser = user.uid === currentUser.uid;
+                            return (
+                              <div
+                                key={user.uid}
+                                className={`leaderboard-row-v2 ${isCurrentUser ? 'is-current-user' : ''}`}
+                              >
+                                <div className="leaderboard-row-left">
+                                  <span className="leaderboard-row-rank">{rank}</span>
+                                  <div
+                                    className="leaderboard-row-avatar"
+                                    style={{ background: getAvatarGradient(user.username) }}
+                                  >
+                                    {getInitials(user.name)}
+                                  </div>
+                                  <div className="leaderboard-row-info">
+                                    <span className="leaderboard-row-name">
+                                      {user.name} {isCurrentUser && " (You)"}
+                                    </span>
+                                    <span className="leaderboard-row-username">@{user.username}</span>
+                                  </div>
+                                </div>
+                                <div className="leaderboard-row-xp">{user.xp} EXP</div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                      )}
+                    </div>
+                  );
+                })()
+              )}
             </>
           )}
         </main>
