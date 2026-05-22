@@ -563,16 +563,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     setIsUserModalOpen(true);
   };
 
-  const handleDeleteUser = async (uid: string, email: string) => {
+  const handleDeleteUser = async (uid: string, _email?: string) => {
     if (uid === currentUser.uid) {
       onShowToast("You cannot delete your own admin account.", "error");
       return;
     }
     if (!window.confirm("Are you sure you want to delete this user? This will permanently remove their account and all task submissions.")) return;
 
-    let tempApp;
     try {
-      // Delete from Supabase first
       const { error } = await supabase
         .from("users")
         .delete()
@@ -580,41 +578,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
       if (error) throw error;
 
-      // Delete from Firebase Auth by signing into their account and self-deleting
-      try {
-        const tempAppName = "DeleteApp-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
-        tempApp = initializeApp(
-          {
-            apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-            authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-            projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-            storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-            messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-            appId: import.meta.env.VITE_FIREBASE_APP_ID,
-            measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-          },
-          tempAppName
-        );
-        const tempAuth = getAuth(tempApp);
-        const cred = await signInWithEmailAndPassword(tempAuth, email, "user@sydions");
-        await deleteUser(cred.user);
-        try { await deleteApp(tempApp); } catch (_) {}
-        tempApp = null;
-      } catch (firebaseErr) {
-        console.error("Could not delete Firebase Auth account (user may have changed password):", firebaseErr);
-        if (tempApp) {
-          try { await deleteApp(tempApp); } catch (_) {}
-        }
-      }
-
       onShowToast("User deleted successfully!", "success");
       fetchUsers();
     } catch (err: any) {
       console.error("Error deleting user:", err);
       onShowToast(err.message || "Failed to delete user.", "error");
-      if (tempApp) {
-        try { await deleteApp(tempApp); } catch (_) {}
-      }
     }
   };
 
