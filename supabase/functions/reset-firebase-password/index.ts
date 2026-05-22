@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import admin from "https://esm.sh/firebase-admin@11.11.0"
+import admin from "npm:firebase-admin@11.11.0"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -47,7 +47,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Reset password error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
