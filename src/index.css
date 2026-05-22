@@ -1824,6 +1824,12 @@ a:hover {
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.2);
 }
 
+.action-icon-btn.reset-btn:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--accent-gold);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+}
+
 .action-icon-btn:active {
   transform: translateY(0);
 }

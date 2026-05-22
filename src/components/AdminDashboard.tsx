@@ -587,6 +587,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     }
   };
 
+  const handleResetPassword = async (uid: string, username: string) => {
+    const isSelf = uid === currentUser.uid;
+    const confirmMessage = isSelf
+      ? `WARNING: You are resetting your OWN admin password to "user@sydions". You may need to sign in again after resetting. Do you want to proceed?`
+      : `Are you sure you want to reset the password for user @${username} to "user@sydions"?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      const { error } = await supabase.functions.invoke("reset-firebase-password", {
+        body: { uid, password: "user@sydions" },
+      });
+
+      if (error) throw error;
+
+      onShowToast(
+        isSelf 
+          ? `Your password has been successfully reset to "user@sydions".` 
+          : `Password for @${username} reset to "user@sydions" successfully!`, 
+        "success"
+      );
+    } catch (err: any) {
+      console.error("Error resetting password:", err);
+      onShowToast(err.message || "Failed to reset password.", "error");
+    }
+  };
+
   // Create Task Handler
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1316,6 +1343,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                                   <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                className="action-icon-btn reset-btn"
+                                title="Reset Password"
+                                onClick={() => handleResetPassword(user.uid, user.username)}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
                                 </svg>
                               </button>
                               <button

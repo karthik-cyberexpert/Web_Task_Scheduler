@@ -44,7 +44,6 @@ const App: React.FC = () => {
       }
 
       const emailLower = email.toLowerCase();
-      const isAdmin = emailLower === "admin@sydions.com";
 
       // 1. First search by UID
       let { data, error } = await supabase
@@ -87,43 +86,6 @@ const App: React.FC = () => {
 
       if (data) {
         setUserProfile(data);
-      } else if (isAdmin) {
-        // Fallback for first-time admin setup
-        const usernameBase = emailLower.split("@")[0];
-        
-        // Check if there is already a user with this username
-        const { data: usernameCheck } = await supabase
-          .from("users")
-          .select("uid")
-          .eq("username", usernameBase)
-          .maybeSingle();
-
-        const finalUsername = usernameCheck ? `${usernameBase}_sydions` : usernameBase;
-
-        const { error: insertErr } = await supabase.from("users").insert({
-          uid: uid,
-          email: emailLower,
-          username: finalUsername,
-          name: "Admin Manager",
-          role: "admin",
-          xp: 0,
-          onboarding: true,
-          created_at: new Date().toISOString()
-        });
-
-        if (insertErr) {
-          console.error("Error inserting admin user:", insertErr);
-        }
-
-        setUserProfile({
-          uid,
-          email: emailLower,
-          username: finalUsername,
-          name: "Admin Manager",
-          role: "admin",
-          xp: 0,
-          onboarding: true,
-        });
       } else {
         // Not registered by Admin. Log out immediately!
         await authSignOut(auth);

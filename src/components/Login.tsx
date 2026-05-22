@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
   signOut as authSignOut
@@ -9,6 +8,7 @@ import {
 import { auth } from "../firebase";
 import { supabase } from "../supabaseClient";
 import { SpotlightCard, ShinyText, BlurReveal } from "./reactbits";
+import { Capacitor } from "@capacitor/core";
 
 
 interface LoginProps {
@@ -21,6 +21,10 @@ export const Login: React.FC<LoginProps> = ({ onShowToast }) => {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
+    if (Capacitor.isNativePlatform()) {
+      onShowToast("Google Sign-In is only supported on Web. Please sign in using your username/password.", "error");
+      return;
+    }
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
@@ -100,14 +104,9 @@ export const Login: React.FC<LoginProps> = ({ onShowToast }) => {
         }
 
         if (!userSnap) {
-          // Check for first-time admin seeding using username "admin"
-          if (inputVal.toLowerCase() === "admin" && password === "12345678") {
-            targetEmail = "admin@sydions.com";
-          } else {
-            onShowToast("Invalid username or password.", "error");
-            setLoading(false);
-            return;
-          }
+          onShowToast("Invalid username or password.", "error");
+          setLoading(false);
+          return;
         } else {
           targetEmail = userSnap.email;
         }
@@ -117,59 +116,18 @@ export const Login: React.FC<LoginProps> = ({ onShowToast }) => {
       await signInWithEmailAndPassword(auth, targetEmail, password);
       onShowToast("Welcome back!", "success");
     } catch (loginErr: any) {
-      // If admin account does not exist, auto-seed it on first correct attempt
-      const isAdminAttempt =
-        (inputVal.toLowerCase() === "admin" || inputVal.toLowerCase() === "admin@sydions.com") &&
-        password === "12345678";
-
-      if (isAdminAttempt) {
-        try {
-          onShowToast("Initializing Admin account for the first time...", "success");
-          const userCredential = await createUserWithEmailAndPassword(
-            auth,
-            "admin@sydions.com",
-            "12345678"
-          );
-          const user = userCredential.user;
-
-          // Register in Supabase users table with both username and email
-          const { error: insertError } = await supabase.from("users").insert({
-            uid: user.uid,
-            email: "admin@sydions.com",
-            username: "admin",
-            name: "Admin Manager",
-            role: "admin",
-            xp: 0,
-            onboarding: true,
-            created_at: new Date().toISOString(),
-          });
-
-          if (insertError) {
-            throw new Error(insertError.message);
-          }
-
-          onShowToast("Admin account seeded and authenticated!", "success");
-        } catch (createErr: any) {
-          if (createErr.code === "auth/email-already-in-use") {
-            onShowToast("Incorrect password for Admin.", "error");
-          } else {
-            onShowToast(createErr.message || "Failed to initialize Admin.", "error");
-          }
-        }
-      } else {
-        // General authentication errors
-        let errorMsg = "Authentication failed. Please check your credentials.";
-        if (
-          loginErr.code === "auth/invalid-credential" ||
-          loginErr.code === "auth/wrong-password" ||
-          loginErr.code === "auth/user-not-found"
-        ) {
-          errorMsg = "Invalid username/email or password.";
-        } else if (loginErr.code === "auth/too-many-requests") {
-          errorMsg = "Access temporarily disabled due to too many failed login attempts.";
-        }
-        onShowToast(errorMsg, "error");
+      // General authentication errors
+      let errorMsg = "Authentication failed. Please check your credentials.";
+      if (
+        loginErr.code === "auth/invalid-credential" ||
+        loginErr.code === "auth/wrong-password" ||
+        loginErr.code === "auth/user-not-found"
+      ) {
+        errorMsg = "Invalid username/email or password.";
+      } else if (loginErr.code === "auth/too-many-requests") {
+        errorMsg = "Access temporarily disabled due to too many failed login attempts.";
       }
+      onShowToast(errorMsg, "error");
     } finally {
       setLoading(false);
     }
