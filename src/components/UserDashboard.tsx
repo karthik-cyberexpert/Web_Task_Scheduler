@@ -909,7 +909,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         <div className="leaderboard-podium">
                           {/* 2nd Place */}
                           {secondUser && (
-                            <div className={`podium-card rank-2 ${secondUser.uid === currentUser.uid ? 'is-current-user' : ''}`}>
+                            <div className={`podium-slot rank-2 ${secondUser.uid === currentUser.uid ? 'is-current-user' : ''}`}>
                               <div className="podium-avatar-container">
                                 <div className="podium-avatar" style={{ background: getAvatarGradient(secondUser.username) }}>
                                   {getInitials(secondUser.name)}
@@ -917,23 +917,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <div className="podium-avatar-badge">2</div>
                               </div>
                               <div className="podium-user-name" title={secondUser.name}>
-                                {secondUser.name}
+                                {secondUser.name} {secondUser.uid === currentUser.uid && " (You)"}
                               </div>
                               <div className="podium-user-username">@{secondUser.username}</div>
-                              <div className="podium-xp">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }}>
+                              <div className="podium-xp-text">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px' }}>
                                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                                 </svg>
-                                {secondUser.xp} EXP
+                                <span style={{ verticalAlign: 'middle' }}>{secondUser.xp} EXP</span>
                               </div>
                             </div>
                           )}
 
                           {/* 1st Place */}
                           {firstUser && (
-                            <div className={`podium-card rank-1 ${firstUser.uid === currentUser.uid ? 'is-current-user' : ''}`}>
+                            <div className={`podium-slot rank-1 ${firstUser.uid === currentUser.uid ? 'is-current-user' : ''}`}>
                               <div className="crown-container">
-                                <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }}>
+                                <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }}>
                                   <path d="M5 16L3 5l5 5 4-7 4 7 5-5-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/>
                                 </svg>
                               </div>
@@ -944,21 +944,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <div className="podium-avatar-badge">1</div>
                               </div>
                               <div className="podium-user-name" title={firstUser.name}>
-                                {firstUser.name}
+                                {firstUser.name} {firstUser.uid === currentUser.uid && " (You)"}
                               </div>
                               <div className="podium-user-username">@{firstUser.username}</div>
-                              <div className="podium-xp">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }}>
+                              <div className="podium-xp-text">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px' }}>
                                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                                 </svg>
-                                {firstUser.xp} EXP
+                                <span style={{ verticalAlign: 'middle' }}>{firstUser.xp} EXP</span>
                               </div>
                             </div>
                           )}
 
                           {/* 3rd Place */}
                           {thirdUser && (
-                            <div className={`podium-card rank-3 ${thirdUser.uid === currentUser.uid ? 'is-current-user' : ''}`}>
+                            <div className={`podium-slot rank-3 ${thirdUser.uid === currentUser.uid ? 'is-current-user' : ''}`}>
                               <div className="podium-avatar-container">
                                 <div className="podium-avatar" style={{ background: getAvatarGradient(thirdUser.username) }}>
                                   {getInitials(thirdUser.name)}
@@ -966,14 +966,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <div className="podium-avatar-badge">3</div>
                               </div>
                               <div className="podium-user-name" title={thirdUser.name}>
-                                {thirdUser.name}
+                                {thirdUser.name} {thirdUser.uid === currentUser.uid && " (You)"}
                               </div>
                               <div className="podium-user-username">@{thirdUser.username}</div>
-                              <div className="podium-xp">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }}>
+                              <div className="podium-xp-text">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px' }}>
                                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                                 </svg>
-                                {thirdUser.xp} EXP
+                                <span style={{ verticalAlign: 'middle' }}>{thirdUser.xp} EXP</span>
                               </div>
                             </div>
                           )}
