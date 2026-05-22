@@ -9,16 +9,31 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+  auth_header text;
 BEGIN
+  -- Safely extract Authorization header directly
+  BEGIN
+    auth_header := current_setting('request.header.authorization', true);
+  EXCEPTION WHEN OTHERS THEN
+    auth_header := NULL;
+  END;
+
   -- Call the Supabase Edge Function asynchronously passing the deleted user's UID
-  PERFORM net.http_post(
-    url := 'https://zlzwommicysvlgskjkns.supabase.co/functions/v1/delete-firebase-user',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('request.headers', true)::jsonb->>'authorization'
-    ),
-    body := jsonb_build_object('uid', old.uid)::text
-  );
+  BEGIN
+    PERFORM net.http_post(
+      url := 'https://zlzwommicysvlgskjkns.supabase.co/functions/v1/delete-firebase-user',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', COALESCE(auth_header, '')
+      ),
+      body := jsonb_build_object('uid', old.uid)::text
+    );
+  EXCEPTION WHEN OTHERS THEN
+    -- Prevent trigger failure from blocking the database deletion
+    RAISE WARNING 'Failed to trigger firebase user deletion: %', SQLERRM;
+  END;
+
   RETURN old;
 END;
 $$;
@@ -28,3 +43,4 @@ DROP TRIGGER IF EXISTS on_user_deleted ON public.users;
 CREATE TRIGGER on_user_deleted
   BEFORE DELETE ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.delete_firebase_user_trigger();
+
