@@ -21,6 +21,17 @@ serve(async (req) => {
       })
     }
 
+    const token = authHeader.replace('Bearer ', '').trim()
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    if (token !== anonKey && token !== serviceRoleKey) {
+      return new Response(JSON.stringify({ error: 'Unauthorized key' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const { uid, password } = await req.json()
     if (!uid || !password) {
       return new Response(JSON.stringify({ error: 'Missing uid or password' }), {
