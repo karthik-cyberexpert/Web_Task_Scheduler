@@ -124,3 +124,48 @@ You must set up the environment variables on your hosting provider so they are i
 
 Once you have added the values to `.env.local` (for local development) and to your hosting provider settings (for production), the initialized Firebase SDK in [src/firebase.ts](file:///k:/projects/Web_Task_Scheduler/src/firebase.ts) will automatically establish the connection to your Firebase backend.
 
+---
+
+## 6. Configuring Gmail SMTP & Trigger Email Extension
+
+To send emails using your Gmail account, you need to install the **Trigger Email from Firestore** extension in your Firebase project and configure it with a Google App Password.
+
+### Step 6.1: Generate a Google App Password
+Google requires App Passwords for third-party apps like the Firebase extension to send email via Gmail SMTP:
+1. Log in to the Google Account you wish to use for sending emails.
+2. Go to [Google Account Settings](https://myaccount.google.com/).
+3. Navigate to **Security** in the left menu.
+4. Under the "How you sign in to Google" section, ensure **2-Step Verification** is enabled.
+5. Click on **2-Step Verification** and scroll to the bottom of the page to find **App passwords** (or search "App passwords" in the top search bar).
+6. Under "Select app", choose **Other (custom name)** and enter a name (e.g., `Web Task Scheduler`).
+7. Click **Generate**.
+8. Copy the **16-character code** (displayed in the yellow box). Keep it safe as you will need this as your SMTP password.
+
+### Step 6.2: Install the Extension in Firebase Console
+1. Open the [Firebase Console](https://console.firebase.google.com/) and select your project.
+2. In the left-hand navigation sidebar, click on **Extensions**.
+3. Search for **Trigger Email from Firestore** (published by Firebase) and click **Install**.
+4. During the configuration wizard, select the Firestore database and fill in the SMTP details:
+   - **SMTP connection URI:** `smtps://smtp.gmail.com:465` (Secure port)
+   - **SMTP password:** Paste the **16-character Google App Password** (without spaces).
+   - **Email documents collection:** `mail` (Must match the collection specified in [src/utils/email.ts](file:///k:/projects/Web_Task_Scheduler/src/utils/email.ts))
+   - **Default FROM address:** Your Gmail address (e.g., `yourname@gmail.com`)
+   - **Default FROM name:** `Sydions Portal` (or your preferred workspace sender name)
+5. Complete the installation steps.
+
+### Step 6.3: Update Firestore Security Rules
+For the application to queue emails, Firestore must permit authenticated users to write to the `mail` collection. Update your Firestore Security Rules in the Firebase Console:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /mail/{document} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false; // Only the extension needs to manage and process documents
+    }
+  }
+}
+```
+
+With these steps complete, creating users, assigning tasks, or reaching deadline thresholds will trigger automated SMTP email notifications through Gmail.
