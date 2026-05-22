@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { initializeApp, deleteApp } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword, signOut as authSignOut } from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as authSignOut } from "firebase/auth";
 import { supabase } from "../supabaseClient";
 import { SpotlightCard, ShinyText, CountUp, BlurReveal } from "./reactbits";
 import { sendGreetingEmail, sendTaskAssignmentEmail } from "../utils/email";
@@ -451,12 +451,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
         );
 
         const secondaryAuth = getAuth(secondaryApp);
-        const userCredential = await createUserWithEmailAndPassword(
-          secondaryAuth,
-          newUserEmail.trim(),
-          "user@sydions"
-        );
-        const createdUser = userCredential.user;
+        let createdUser;
+        try {
+          const userCredential = await createUserWithEmailAndPassword(
+            secondaryAuth,
+            newUserEmail.trim(),
+            "user@sydions"
+          );
+          createdUser = userCredential.user;
+        } catch (authErr: any) {
+          if (authErr.code === "auth/email-already-in-use") {
+            try {
+              const userCredential = await signInWithEmailAndPassword(
+                secondaryAuth,
+                newUserEmail.trim(),
+                "user@sydions"
+              );
+              createdUser = userCredential.user;
+            } catch (signInErr) {
+              throw authErr;
+            }
+          } else {
+            throw authErr;
+          }
+        }
 
         // Log out of the secondary app instance
         await authSignOut(secondaryAuth);
