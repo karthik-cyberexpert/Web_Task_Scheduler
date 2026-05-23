@@ -242,36 +242,36 @@ const Pagination: React.FC<{
   totalPages: number;
   onPageChange: (page: number) => void;
 }> = ({ currentPage, totalPages, onPageChange }) => {
-  if (totalPages <= 1) return null;
+  const total = Math.max(1, totalPages);
 
   const getPages = () => {
     const pages: (number | string)[] = [];
     if (currentPage === 1) {
       pages.push(1);
-      if (totalPages >= 2) pages.push(2);
-      if (totalPages >= 3) pages.push(3);
-      if (totalPages > 4) pages.push("...");
-      if (totalPages >= 4) pages.push(totalPages);
+      if (total >= 2) pages.push(2);
+      if (total >= 3) pages.push(3);
+      if (total > 4) pages.push("...");
+      if (total >= 4) pages.push(total);
     } else if (currentPage === 2) {
       pages.push(1, 2);
-      if (totalPages >= 3) pages.push(3);
-      if (totalPages >= 4) pages.push(4);
-      if (totalPages > 5) pages.push("...");
-      if (totalPages >= 5) pages.push(totalPages);
+      if (total >= 3) pages.push(3);
+      if (total >= 4) pages.push(4);
+      if (total > 5) pages.push("...");
+      if (total >= 5) pages.push(total);
     } else {
       pages.push(1);
       pages.push("...");
       pages.push(currentPage);
-      if (currentPage + 1 < totalPages) {
+      if (currentPage + 1 < total) {
         pages.push(currentPage + 1);
       }
-      if (currentPage + 2 < totalPages) {
+      if (currentPage + 2 < total) {
         pages.push(currentPage + 2);
       }
-      if (currentPage + 3 < totalPages) {
+      if (currentPage + 3 < total) {
         pages.push("...");
       }
-      pages.push(totalPages);
+      pages.push(total);
     }
     return pages;
   };
@@ -323,7 +323,7 @@ const Pagination: React.FC<{
       <button
         type="button"
         className="btn btn-secondary btn-sm"
-        disabled={currentPage === totalPages}
+        disabled={currentPage === total}
         onClick={() => onPageChange(currentPage + 1)}
         style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', fontSize: '0.8rem' }}
       >
