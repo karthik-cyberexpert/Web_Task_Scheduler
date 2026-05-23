@@ -1,14 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   signInWithEmailAndPassword, 
   signInWithPopup,
   GoogleAuthProvider,
-  signOut as authSignOut
+  signOut as authSignOut,
+  signInWithCredential
 } from "firebase/auth";
 import { auth } from "../firebase";
 import { supabase } from "../supabaseClient";
 import { SpotlightCard, ShinyText, BlurReveal } from "./reactbits";
 import { Capacitor } from "@capacitor/core";
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
 
 interface LoginProps {
@@ -20,16 +22,34 @@ export const Login: React.FC<LoginProps> = ({ onShowToast }) => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleGoogleSignIn = async () => {
+  useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      onShowToast("Google Sign-In is only supported on Web. Please sign in using your username/password.", "error");
-      return;
+      GoogleAuth.initialize();
     }
+  }, []);
+
+  const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
-      const userCredential = await signInWithPopup(auth, provider);
+      let idToken = "";
+
+      if (Capacitor.isNativePlatform()) {
+        const nativeUser = await GoogleAuth.signIn();
+        idToken = nativeUser.authentication.idToken;
+      } else {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
+        const userCredential = await signInWithPopup(auth, provider);
+        const credential = GoogleAuthProvider.credentialFromResult(userCredential);
+        idToken = credential?.idToken || "";
+      }
+
+      if (!idToken) {
+        throw new Error("No ID Token returned from Google authentication.");
+      }
+
+      const credential = GoogleAuthProvider.credential(idToken);
+      const userCredential = await signInWithCredential(auth, credential);
       const user = userCredential.user;
 
       if (!user.email) {
