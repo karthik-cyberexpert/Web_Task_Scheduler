@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "540302821731",
+    "project_id": "sydions-scheduler",
+    "storage_bucket": "sydions-scheduler.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:540302821731:android:097ee1ad06dce3a6262b56",
+        "android_client_info": {
+          "package_name": "com.sydions.scheduler"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "540302821731-aeouuincmekmvgqgfqrsr5lv48obrf2u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sydions.scheduler",
+            "certificate_hash": "7c1265b242e56c80f7c30843936a9681a521f229"
+          }
+        },
+        {
+          "client_id": "540302821731-ermnhis4l5n7ktghcosnku261otb1597.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDptXGYacDaZVGK5u6FQTuV_OZww0SZK9Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "540302821731-ermnhis4l5n7ktghcosnku261otb1597.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
