@@ -1520,6 +1520,12 @@ a:hover {
   flex-shrink: 0;
 }
 
+@media (max-width: 768px) {
+  .calendar-popup-card {
+    position: fixed;
+  }
+}
+
 /* Hide spin arrows for number inputs in calendar card */
 .calendar-popup-card input[type="number"]::-webkit-outer-spin-button,
 .calendar-popup-card input[type="number"]::-webkit-inner-spin-button {
