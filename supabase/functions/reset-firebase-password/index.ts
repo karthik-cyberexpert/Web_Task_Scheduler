@@ -24,8 +24,19 @@ serve(async (req) => {
     const token = authHeader.replace('Bearer ', '').trim()
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    let publishableKey = null
 
-    if (token !== anonKey && token !== serviceRoleKey) {
+    try {
+      const pubKeysJson = Deno.env.get('SUPABASE_PUBLISHABLE_KEYS')
+      if (pubKeysJson) {
+        const pubKeys = JSON.parse(pubKeysJson)
+        publishableKey = pubKeys.default || pubKeys.anon || null
+      }
+    } catch (_) {
+      // Ignore parsing errors
+    }
+
+    if (token !== anonKey && token !== serviceRoleKey && token !== publishableKey) {
       return new Response(JSON.stringify({ error: 'Unauthorized key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
