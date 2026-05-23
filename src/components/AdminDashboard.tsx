@@ -35,7 +35,8 @@ const mapTask = (t: any) => ({
   createdById: t.created_by_id,
   createdAt: { toDate: () => new Date(t.created_at) },
   status: t.status,
-  requiredFields: t.required_fields || ["textarea"]
+  requiredFields: t.required_fields || ["textarea"],
+  publishedAt: t.published_at ? { toDate: () => new Date(t.published_at) } : null
 });
 
 const mapSubmission = (s: any) => ({
@@ -113,6 +114,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   // Submissions modal states
   const [selectedTaskForSubmissions, setSelectedTaskForSubmissions] = useState<any>(null);
   const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState(false);
+  const [modalSubmissions, setModalSubmissions] = useState<any[]>([]);
+  const [modalRatings, setModalRatings] = useState<any[]>([]);
+  const [modalSubmissionsLoading, setModalSubmissionsLoading] = useState(false);
+  const [modalTab, setModalTab] = useState<"pending" | "approved">("pending");
 
   // Stats states
   const [totalUsers, setTotalUsers] = useState(0);
@@ -278,7 +283,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
   const [usersList, setUsersList] = useState<any[]>([]);
   const [tasksList, setTasksList] = useState<any[]>([]);
-  const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([]);
+  const [allSubmissions, setAllSubmissions] = useState<any[]>([]);
 
   const fetchUsers = async () => {
     const { data, error } = await supabase
@@ -318,7 +323,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     const { data, error } = await supabase
       .from("submissions")
       .select("*")
-      .eq("status", "pending")
       .order("submitted_at", { ascending: false });
 
     if (error) {
@@ -327,8 +331,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     }
     if (data) {
       const mapped = data.map(mapSubmission);
-      setPendingSubmissions(mapped);
-      setPendingSubmissionsCount(mapped.length);
+      setAllSubmissions(mapped);
+      const pending = mapped.filter((sub: any) => sub.status === "pending");
+      setPendingSubmissionsCount(pending.length);
     }
   };
 
@@ -365,6 +370,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       supabase.removeChannel(submissionsChannel);
     };
   }, []);
+
+  const fetchModalSubmissionsAndRatings = async () => {
+    if (!selectedTaskForSubmissions) return;
+    setModalSubmissionsLoading(true);
+    try {
+      const { data: subsData, error: subsError } = await supabase
+        .from("submissions")
+        .select("*")
+        .eq("task_id", selectedTaskForSubmissions.id)
+        .order("submitted_at", { ascending: false });
+
+      if (subsError) throw subsError;
+
+      const subIds = (subsData || []).map(s => s.id);
+      let ratingsData: any[] = [];
+      if (subIds.length > 0) {
+        const { data: ratData, error: ratError } = await supabase
+          .from("submission_ratings")
+          .select("*")
+          .in("submission_id", subIds);
+        if (ratError) throw ratError;
+        ratingsData = ratData || [];
+      }
+
+      setModalSubmissions((subsData || []).map(mapSubmission));
+      setModalRatings(ratingsData);
+    } catch (err) {
+      console.error("Error fetching modal subs/ratings:", err);
+    } finally {
+      setModalSubmissionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isSubmissionsModalOpen && selectedTaskForSubmissions) {
+      fetchModalSubmissionsAndRatings();
+    }
+  }, [isSubmissionsModalOpen, selectedTaskForSubmissions]);
+
+  const handlePublishTask = async (taskId: string) => {
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({ published_at: new Date().toISOString() })
+        .eq("id", taskId);
+
+      if (error) throw error;
+      onShowToast("Task published to Evaluate page successfully!", "success");
+      fetchTasks();
+    } catch (err: any) {
+      console.error("Error publishing task:", err);
+      onShowToast(err.message || "Failed to publish task.", "error");
+    }
+  };
 
   // Create or Update User Handler
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -872,6 +931,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
         if (subErr) throw new Error(subErr.message);
         onShowToast(`Submission rejected. No EXP awarded.`, "success");
       }
+      fetchModalSubmissionsAndRatings();
     } catch (err: any) {
       console.error(err);
       onShowToast(err.message || "Failed to process submission.", "error");
@@ -1191,6 +1251,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                         <th>Reward</th>
                         <th>Assignment</th>
                         <th>Status</th>
+                        <th>Publish</th>
                         <th>Submissions</th>
                         <th style={{ textAlign: 'center' }}>Actions</th>
                       </tr>
@@ -1198,7 +1259,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                     <tbody>
                       {tasksList.map((task) => {
                         const isOverdue = new Date(task.deadline.toDate()) < new Date();
-                        const taskPendingCount = pendingSubmissions.filter((sub) => sub.taskId === task.id).length;
+                        const taskSubs = allSubmissions.filter((sub) => sub.taskId === task.id);
+                        const taskPendingCount = taskSubs.filter((sub) => sub.status === "pending").length;
+                        const taskTotalCount = taskSubs.length;
                         return (
                           <tr key={task.id}>
                             <td>
@@ -1231,15 +1294,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                               </span>
                             </td>
                             <td>
+                              {(() => {
+                                if (!task.publishedAt) {
+                                  return (
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.6rem' }}
+                                      onClick={() => handlePublishTask(task.id)}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                      </svg>
+                                      Publish
+                                    </button>
+                                  );
+                                }
+
+                                const pubDate = new Date(task.publishedAt.toDate());
+                                const now = new Date();
+                                const diffMs = now.getTime() - pubDate.getTime();
+                                const diffHours = diffMs / (1000 * 60 * 60);
+
+                                if (diffHours < 24) {
+                                  const remainingMs = (24 * 60 * 60 * 1000) - diffMs;
+                                  const remHours = Math.floor(remainingMs / (1000 * 60 * 60));
+                                  const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+                                  return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                      <span className="status-capsule active" style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', width: 'fit-content' }}>
+                                        Published
+                                      </span>
+                                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                        {remHours}h {remMins}m left
+                                      </span>
+                                      <button
+                                        type="button"
+                                        style={{ fontSize: '0.65rem', color: 'var(--primary-hover)', background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handlePublishTask(task.id)}
+                                      >
+                                        Re-publish
+                                      </button>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                    <span className="status-capsule pending" style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', backgroundColor: 'var(--danger)', color: '#fff', width: 'fit-content' }}>
+                                      Expired
+                                    </span>
+                                    <button
+                                      type="button"
+                                      style={{ fontSize: '0.65rem', color: 'var(--primary-hover)', background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', textDecoration: 'underline' }}
+                                      onClick={() => handlePublishTask(task.id)}
+                                    >
+                                      Publish again
+                                    </button>
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td>
                               <button
                                 className="btn btn-secondary btn-sm"
-                                disabled={taskPendingCount === 0}
+                                disabled={taskTotalCount === 0}
                                 onClick={() => {
                                   setSelectedTaskForSubmissions(task);
                                   setIsSubmissionsModalOpen(true);
                                 }}
                               >
-                                View Pending ({taskPendingCount})
+                                View ({taskPendingCount} Pnd / {taskTotalCount} Tot)
                               </button>
                             </td>
                             <td>
@@ -2035,56 +2160,162 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
       {/* Task Submissions Modal */}
       {isSubmissionsModalOpen && selectedTaskForSubmissions && (
-        <div className="modal-overlay" onClick={() => setIsSubmissionsModalOpen(false)}>
+        <div className="modal-overlay" onClick={() => { setIsSubmissionsModalOpen(false); setModalTab("pending"); }}>
           <div className="modal-content" style={{ maxWidth: '680px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+            <div className="modal-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
               <div className="modal-title">Submissions: {selectedTaskForSubmissions.title}</div>
-              <button type="button" className="modal-close-btn" onClick={() => setIsSubmissionsModalOpen(false)}>
+              <button type="button" className="modal-close-btn" onClick={() => { setIsSubmissionsModalOpen(false); setModalTab("pending"); }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="modal-body">
-              {pendingSubmissions.filter(sub => sub.taskId === selectedTaskForSubmissions.id).length === 0 ? (
-                <div className="empty-placeholder">
-                  No pending submissions for this task.
+
+            {/* Modal Tabs */}
+            <div style={{ display: 'flex', gap: '1rem', padding: '0 1.5rem', borderBottom: '1px solid var(--border-color)', marginTop: '1rem' }}>
+              <button
+                type="button"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: modalTab === "pending" ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: modalTab === "pending" ? 'var(--text-primary)' : 'var(--text-muted)',
+                  padding: '0.5rem 0.25rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setModalTab("pending")}
+              >
+                Pending Approvals ({modalSubmissions.filter(s => s.status === 'pending').length})
+              </button>
+              <button
+                type="button"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: modalTab === "approved" ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: modalTab === "approved" ? 'var(--text-primary)' : 'var(--text-muted)',
+                  padding: '0.5rem 0.25rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setModalTab("approved")}
+              >
+                Approved & Rated ({modalSubmissions.filter(s => s.status === 'approved').length})
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto', padding: '1.5rem' }}>
+              {modalSubmissionsLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+                  <div className="spinner"></div>
                 </div>
-              ) : (
-                <div className="pending-submissions-list">
-                  {pendingSubmissions
-                    .filter(sub => sub.taskId === selectedTaskForSubmissions.id)
-                    .map((sub) => (
-                      <div key={sub.id} className="submission-item-row" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div className="submission-meta" style={{ flexGrow: 1, flexDirection: 'column', gap: '0.5rem', marginRight: '2rem' }}>
-                          <div className="submission-user-info">
-                            <span className="submission-user-name" style={{ fontSize: '1.05rem' }}>{sub.userName}</span>
-                            <span className="submission-user-email">{sub.userEmail}</span>
+              ) : modalTab === "pending" ? (
+                modalSubmissions.filter(sub => sub.status === 'pending').length === 0 ? (
+                  <div className="empty-placeholder">
+                    No pending submissions for this task.
+                  </div>
+                ) : (
+                  <div className="pending-submissions-list">
+                    {modalSubmissions
+                      .filter(sub => sub.status === 'pending')
+                      .map((sub) => (
+                        <div key={sub.id} className="submission-item-row" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div className="submission-meta" style={{ flexGrow: 1, flexDirection: 'column', gap: '0.5rem', marginRight: '2rem' }}>
+                            <div className="submission-user-info">
+                              <span className="submission-user-name" style={{ fontSize: '1.05rem' }}>{sub.userName}</span>
+                              <span className="submission-user-email">{sub.userEmail}</span>
+                            </div>
+                            <span className="submission-submitted-at" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              Submitted: {new Date(sub.submittedAt.toDate()).toLocaleString()}
+                            </span>
+                            <div className="submission-content-box" style={{ marginTop: '0.5rem', width: '100%', maxWidth: '800px' }}>{renderSubmissionContent(sub.content)}</div>
                           </div>
-                          <span className="submission-submitted-at" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            Submitted: {new Date(sub.submittedAt.toDate()).toLocaleString()}
-                          </span>
-                          <div className="submission-content-box" style={{ marginTop: '0.5rem', width: '100%', maxWidth: '800px' }}>{renderSubmissionContent(sub.content)}</div>
+                          <div className="submission-actions-row" style={{ flexShrink: 0, gap: '0.75rem', display: 'flex', flexDirection: 'column', minWidth: '110px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              style={{ backgroundColor: "var(--success)", width: '100%' }}
+                              onClick={() => handleSubmissionAction(sub, "approve")}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ borderColor: "var(--danger)", color: "var(--danger)", width: '100%' }}
+                              onClick={() => handleSubmissionAction(sub, "reject")}
+                            >
+                              Reject
+                            </button>
+                          </div>
                         </div>
-                        <div className="submission-actions-row" style={{ flexShrink: 0, gap: '0.75rem', display: 'flex', flexDirection: 'column', minWidth: '110px' }}>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            style={{ backgroundColor: "var(--success)", width: '100%' }}
-                            onClick={() => handleSubmissionAction(sub, "approve")}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            style={{ borderColor: "var(--danger)", color: "var(--danger)", width: '100%' }}
-                            onClick={() => handleSubmissionAction(sub, "reject")}
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                </div>
+                      ))}
+                  </div>
+                )
+              ) : (
+                modalSubmissions.filter(sub => sub.status === 'approved').length === 0 ? (
+                  <div className="empty-placeholder">
+                    No approved submissions for this task.
+                  </div>
+                ) : (
+                  <div className="pending-submissions-list">
+                    {modalSubmissions
+                      .filter(sub => sub.status === 'approved')
+                      .map((sub) => {
+                        const ratingsForSub = modalRatings.filter(r => r.submission_id === sub.id);
+                        const avgRating = ratingsForSub.length > 0
+                          ? (ratingsForSub.reduce((acc, curr) => acc + curr.rating, 0) / ratingsForSub.length).toFixed(1)
+                          : null;
+
+                        return (
+                          <div key={sub.id} className="submission-item-row" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'stretch', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div className="submission-user-info">
+                                <span className="submission-user-name" style={{ fontSize: '1rem', fontWeight: 600 }}>{sub.userName}</span>
+                                <span className="submission-user-email" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{sub.userEmail}</span>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+                                <span className="submission-submitted-at" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  Submitted: {new Date(sub.submittedAt.toDate()).toLocaleString()}
+                                </span>
+                                {avgRating ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(251,191,36,0.1)', padding: '0.2rem 0.5rem', borderRadius: '12px', border: '1px solid rgba(251,191,36,0.2)' }}>
+                                    <span style={{ color: 'var(--accent-gold)', fontWeight: 'bold', fontSize: '0.8rem' }}>★ {avgRating}</span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>({ratingsForSub.length})</span>
+                                  </div>
+                                ) : (
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No ratings yet</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="submission-content-box" style={{ width: '100%' }}>
+                              {renderSubmissionContent(sub.content)}
+                            </div>
+
+                            {ratingsForSub.length > 0 && (
+                              <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-color)' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Peer Ratings Breakdown (Admin Only):</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                  {ratingsForSub.map((rating) => {
+                                    const rater = usersList.find(u => u.uid === rating.rater_id);
+                                    return (
+                                      <span key={rating.id} style={{ fontSize: '0.7rem', background: 'var(--bg-surface-hover)', padding: '0.2rem 0.4rem', borderRadius: '4px', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
+                                        @{rater?.username || 'unknown'}: <strong>{rating.rating} ★</strong>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )
               )}
             </div>
           </div>

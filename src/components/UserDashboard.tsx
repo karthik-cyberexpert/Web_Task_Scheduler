@@ -35,7 +35,8 @@ const mapTask = (t: any) => ({
   createdById: t.created_by_id,
   createdAt: { toDate: () => new Date(t.created_at) },
   status: t.status,
-  requiredFields: t.required_fields || ["textarea"]
+  requiredFields: t.required_fields || ["textarea"],
+  publishedAt: t.published_at ? { toDate: () => new Date(t.published_at) } : null
 });
 
 const mapSubmission = (s: any) => ({
@@ -77,6 +78,43 @@ export const getInitials = (name: string) => {
     return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
   }
   return parts[0].substring(0, 2).toUpperCase();
+};
+
+const SubmissionStarRating: React.FC<{
+  currentRating: number;
+  onRate: (rating: number) => void;
+}> = ({ currentRating, onRate }) => {
+  const [hoverRating, setHoverRating] = useState<number | null>(null);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.5rem' }}>
+      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginRight: '0.5rem' }}>Your Rating:</span>
+      {[1, 2, 3, 4, 5].map((val) => {
+        const isFilled = hoverRating !== null ? val <= hoverRating : val <= currentRating;
+        return (
+          <button
+            key={val}
+            type="button"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '0.1rem',
+              color: isFilled ? 'var(--accent-gold)' : 'var(--text-muted)',
+              fontSize: '1.4rem',
+              lineHeight: 1,
+              transition: 'transform 0.1s ease',
+              transform: hoverRating === val ? 'scale(1.25)' : 'none'
+            }}
+            onClick={() => onRate(val)}
+            onMouseEnter={() => setHoverRating(val)}
+            onMouseLeave={() => setHoverRating(null)}
+          >
+            ★
+          </button>
+        );
+      })}
+    </div>
+  );
 };
 
 const compressImage = async (file: File): Promise<File> => {
@@ -205,9 +243,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   userProfile,
   onNavigateToAdmin,
 }) => {
-  // Navigation tabs: overview, tasks, history, leaderboard
-  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "history" | "leaderboard">("overview");
+  // Navigation tabs: overview, tasks, history, leaderboard, evaluate
+  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "history" | "leaderboard" | "evaluate">("overview");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [evaluateTasks, setEvaluateTasks] = useState<any[]>([]);
+  const [evaluateSubmissions, setEvaluateSubmissions] = useState<any[]>([]);
+  const [userRatings, setUserRatings] = useState<any[]>([]);
+  const [isEvaluating, setIsEvaluating] = useState(false);
 
   const [submissionContent, setSubmissionContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -282,10 +324,75 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     }
   };
 
+  const fetchEvaluations = async () => {
+    setIsEvaluating(true);
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: tasksData, error: tasksError } = await supabase
+        .from("tasks")
+        .select("*")
+        .not("published_at", "is", null)
+        .gt("published_at", twentyFourHoursAgo);
+
+      if (tasksError) throw tasksError;
+
+      const mappedTasks = (tasksData || []).map(mapTask);
+      setEvaluateTasks(mappedTasks);
+
+      const publishedTaskIds = mappedTasks.map(t => t.id);
+      if (publishedTaskIds.length > 0) {
+        const { data: subsData, error: subsError } = await supabase
+          .from("submissions")
+          .select("*")
+          .in("task_id", publishedTaskIds)
+          .eq("status", "approved")
+          .neq("user_id", currentUser.uid);
+
+        if (subsError) throw subsError;
+        setEvaluateSubmissions((subsData || []).map(mapSubmission));
+      } else {
+        setEvaluateSubmissions([]);
+      }
+
+      const { data: ratingsData, error: ratingsError } = await supabase
+        .from("submission_ratings")
+        .select("*")
+        .eq("rater_id", currentUser.uid);
+
+      if (ratingsError) throw ratingsError;
+      setUserRatings(ratingsData || []);
+    } catch (err) {
+      console.error("Error fetching evaluations data:", err);
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleRateSubmission = async (submissionId: string, ratingValue: number) => {
+    try {
+      const { error } = await supabase
+        .from("submission_ratings")
+        .upsert({
+          submission_id: submissionId,
+          rater_id: currentUser.uid,
+          rating: ratingValue,
+          rated_at: new Date().toISOString()
+        }, { onConflict: "submission_id,rater_id" });
+
+      if (error) throw error;
+      onShowToast("Submission rated successfully!", "success");
+      fetchEvaluations();
+    } catch (err: any) {
+      console.error("Error rating submission:", err);
+      onShowToast(err.message || "Failed to submit rating.", "error");
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchTasks();
     fetchSubmissions();
+    fetchEvaluations();
 
     const usersChannel = supabase
       .channel("users-user")
@@ -294,18 +401,30 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
     const tasksChannel = supabase
       .channel("tasks-user")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, fetchTasks)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => {
+        fetchTasks();
+        fetchEvaluations();
+      })
       .subscribe();
 
     const submissionsChannel = supabase
       .channel("submissions-user")
-      .on("postgres_changes", { event: "*", schema: "public", table: "submissions" }, fetchSubmissions)
+      .on("postgres_changes", { event: "*", schema: "public", table: "submissions" }, () => {
+        fetchSubmissions();
+        fetchEvaluations();
+      })
+      .subscribe();
+
+    const ratingsChannel = supabase
+      .channel("ratings-user")
+      .on("postgres_changes", { event: "*", schema: "public", table: "submission_ratings" }, fetchEvaluations)
       .subscribe();
 
     return () => {
       supabase.removeChannel(usersChannel);
       supabase.removeChannel(tasksChannel);
       supabase.removeChannel(submissionsChannel);
+      supabase.removeChannel(ratingsChannel);
     };
   }, [currentUser.uid]);
 
@@ -595,6 +714,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <circle cx="12" cy="12" r="9" />
               </svg>
               Submission History
+            </button>
+            <button
+              className={`sidebar-nav-item ${activeTab === "evaluate" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("evaluate");
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+              Evaluate Submissions
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "leaderboard" ? "active" : ""}`}
@@ -1058,6 +1189,124 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     </div>
                   );
                 })()
+              )}
+            </>
+          )}
+
+          {activeTab === "evaluate" && (
+            <>
+              <div className="dashboard-view-title">Evaluate Peer Submissions</div>
+              <p className="dashboard-view-desc">
+                Review and rate approved solutions submitted by your peers. Your ratings are fully anonymous to other users, but visible to the admin. You cannot evaluate your own submissions.
+              </p>
+
+              {isEvaluating ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+                  <div className="spinner"></div>
+                </div>
+              ) : evaluateTasks.length === 0 || evaluateSubmissions.length === 0 ? (
+                <div className="empty-placeholder">
+                  No peer submissions available for evaluation at this time.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {evaluateTasks.map((task) => {
+                    const subsForTask = evaluateSubmissions.filter(sub => sub.taskId === task.id);
+                    if (subsForTask.length === 0) return null;
+
+                    const pubDate = new Date(task.publishedAt.toDate());
+                    const now = new Date();
+                    const diffMs = now.getTime() - pubDate.getTime();
+                    const remainingMs = Math.max(0, (24 * 60 * 60 * 1000) - diffMs);
+                    const remHours = Math.floor(remainingMs / (1000 * 60 * 60));
+                    const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+
+                    return (
+                      <SpotlightCard
+                        key={task.id}
+                        className="card"
+                        spotlightColor="rgba(99, 102, 241, 0.05)"
+                        style={{ padding: '1.25rem' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+                          <div>
+                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{task.title}</h3>
+                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{task.description}</p>
+                          </div>
+                          <span className="status-capsule active" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <circle cx="12" cy="12" r="10" />
+                              <polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            {remHours}h {remMins}m left
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          {subsForTask.map((sub) => {
+                            const currentRating = userRatings.find(r => r.submission_id === sub.id)?.rating || 0;
+                            const submitterProfile = leaderboardList.find(u => u.uid === sub.userId);
+                            const submitterUsername = submitterProfile?.username || 'user';
+
+                            return (
+                              <div
+                                key={sub.id}
+                                style={{
+                                  padding: '1rem',
+                                  backgroundColor: 'var(--bg-base)',
+                                  borderRadius: 'var(--border-radius-md)',
+                                  border: '1px solid var(--border-color)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '0.5rem'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <div
+                                      style={{
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 700,
+                                        color: '#fff',
+                                        background: getAvatarGradient(submitterUsername)
+                                      }}
+                                    >
+                                      {getInitials(sub.userName)}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                      <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>{sub.userName}</span>
+                                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{submitterUsername}</span>
+                                    </div>
+                                  </div>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                    Submitted: {new Date(sub.submittedAt.toDate()).toLocaleDateString()}
+                                  </span>
+                                </div>
+
+                                <div className="submission-content-box" style={{ marginTop: '0.25rem' }}>
+                                  {renderSubmissionContent(sub.content)}
+                                </div>
+
+                                <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.5rem', paddingTop: '0.25rem' }}>
+                                  <SubmissionStarRating
+                                    currentRating={currentRating}
+                                    onRate={(val) => handleRateSubmission(sub.id, val)}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </SpotlightCard>
+                    );
+                  })}
+                </div>
               )}
             </>
           )}
