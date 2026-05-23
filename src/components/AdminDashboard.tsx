@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as authSignOut } from "firebase/auth";
 import { supabase } from "../supabaseClient";
@@ -2083,38 +2084,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                   <div className="pending-submissions-list">
                     {modalSubmissions
                       .filter(sub => sub.status === 'pending')
-                      .map((sub) => (
-                        <div key={sub.id} className="submission-item-row" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div className="submission-meta" style={{ flexGrow: 1, flexDirection: 'column', gap: '0.5rem', marginRight: '2rem' }}>
-                            <div className="submission-user-info">
-                              <span className="submission-user-name" style={{ fontSize: '1.05rem' }}>{sub.userName}</span>
-                              <span className="submission-user-email">{sub.userEmail}</span>
+                      .sort((a, b) => new Date(a.submittedAt.toDate()).getTime() - new Date(b.submittedAt.toDate()).getTime())
+                      .map((sub, index) => {
+                        const isGradingDisabled = index > 0;
+                        return (
+                          <div key={sub.id} className="submission-item-row" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', opacity: isGradingDisabled ? 0.7 : 1 }}>
+                            <div className="submission-meta" style={{ flexGrow: 1, flexDirection: 'column', gap: '0.5rem', marginRight: '2rem' }}>
+                              <div className="submission-user-info">
+                                <span className="submission-user-name" style={{ fontSize: '1.05rem' }}>{sub.userName}</span>
+                                <span className="submission-user-email">{sub.userEmail}</span>
+                              </div>
+                              <span className="submission-submitted-at" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                Submitted: {new Date(sub.submittedAt.toDate()).toLocaleString()}
+                              </span>
+                              <div className="submission-content-box" style={{ marginTop: '0.5rem', width: '100%', maxWidth: '800px' }}>{renderSubmissionContent(sub.content)}</div>
                             </div>
-                            <span className="submission-submitted-at" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              Submitted: {new Date(sub.submittedAt.toDate()).toLocaleString()}
-                            </span>
-                            <div className="submission-content-box" style={{ marginTop: '0.5rem', width: '100%', maxWidth: '800px' }}>{renderSubmissionContent(sub.content)}</div>
+                            <div className="submission-actions-row" style={{ flexShrink: 0, gap: '0.75rem', display: 'flex', flexDirection: 'column', minWidth: '110px' }}>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                style={{ backgroundColor: isGradingDisabled ? 'var(--text-muted)' : "var(--success)", width: '100%', cursor: isGradingDisabled ? 'not-allowed' : 'pointer' }}
+                                disabled={isGradingDisabled}
+                                title={isGradingDisabled ? "Please grade older submissions first" : ""}
+                                onClick={() => handleSubmissionAction(sub, "approve")}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ borderColor: isGradingDisabled ? 'var(--border-color)' : "var(--danger)", color: isGradingDisabled ? 'var(--text-muted)' : "var(--danger)", width: '100%', cursor: isGradingDisabled ? 'not-allowed' : 'pointer' }}
+                                disabled={isGradingDisabled}
+                                title={isGradingDisabled ? "Please grade older submissions first" : ""}
+                                onClick={() => handleSubmissionAction(sub, "reject")}
+                              >
+                                Reject
+                              </button>
+                            </div>
                           </div>
-                          <div className="submission-actions-row" style={{ flexShrink: 0, gap: '0.75rem', display: 'flex', flexDirection: 'column', minWidth: '110px' }}>
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              style={{ backgroundColor: "var(--success)", width: '100%' }}
-                              onClick={() => handleSubmissionAction(sub, "approve")}
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              style={{ borderColor: "var(--danger)", color: "var(--danger)", width: '100%' }}
-                              onClick={() => handleSubmissionAction(sub, "reject")}
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                   </div>
                 )
               ) : (
@@ -2184,7 +2193,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
         </div>
       )}
 
-      {isCalendarPopupOpen && taskStep === 2 && (
+      {isCalendarPopupOpen && taskStep === 2 && createPortal(
         <>
           <div
             style={{
@@ -2320,7 +2329,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
               )}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );

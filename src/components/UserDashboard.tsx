@@ -250,11 +250,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [evaluateSubmissions, setEvaluateSubmissions] = useState<any[]>([]);
   const [userRatings, setUserRatings] = useState<any[]>([]);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [historyRatings, setHistoryRatings] = useState<any[]>([]);
 
   const [submissionContent, setSubmissionContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [activeSubmitTask, setActiveSubmitTask] = useState<any>(null);
+  const [viewingDescription, setViewingDescription] = useState<string | null>(null);
 
   const [subText, setSubText] = useState("");
   const [subLink, setSubLink] = useState("");
@@ -321,6 +323,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     if (data) {
       const mapped = data.map(mapSubmission);
       setMySubmissions(mapped);
+
+      if (mapped.length > 0) {
+        const subIds = mapped.map((s: any) => s.id);
+        const { data: ratingsData, error: ratingsError } = await supabase
+          .from("submission_ratings")
+          .select("*")
+          .in("submission_id", subIds);
+        if (!ratingsError && ratingsData) {
+          setHistoryRatings(ratingsData);
+        } else {
+          setHistoryRatings([]);
+        }
+      } else {
+        setHistoryRatings([]);
+      }
     }
   };
 
@@ -417,7 +434,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
     const ratingsChannel = supabase
       .channel("ratings-user")
-      .on("postgres_changes", { event: "*", schema: "public", table: "submission_ratings" }, fetchEvaluations)
+      .on("postgres_changes", { event: "*", schema: "public", table: "submission_ratings" }, () => {
+        fetchEvaluations();
+        fetchSubmissions();
+      })
       .subscribe();
 
     return () => {
@@ -575,21 +595,36 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
       const contentString = JSON.stringify(contentObj);
 
-      const { error: insertErr } = await supabase.from("submissions").insert({
-        task_id: task.id,
-        task_title: task.title,
-        user_id: currentUser.uid,
-        user_name: userProfile?.name || "User",
-        user_email: currentUser.email,
-        content: contentString,
-        status: "pending",
-        submitted_at: new Date().toISOString(),
-        xp_awarded: 0,
-      });
+      const existingSub = mySubmissions.find((sub) => sub.taskId === task.id);
+      
+      let insertErr;
+      if (existingSub) {
+        const { error } = await supabase.from("submissions").update({
+          content: contentString,
+          status: "pending",
+          submitted_at: new Date().toISOString(),
+        }).eq("id", existingSub.id);
+        insertErr = error;
+      } else {
+        const { error } = await supabase.from("submissions").insert({
+          task_id: task.id,
+          task_title: task.title,
+          user_id: currentUser.uid,
+          user_name: userProfile?.name || "User",
+          user_email: currentUser.email,
+          content: contentString,
+          status: "pending",
+          submitted_at: new Date().toISOString(),
+          xp_awarded: 0,
+        });
+        insertErr = error;
+      }
 
       if (insertErr) {
         throw new Error(insertErr.message);
       }
+
+      await fetchSubmissions();
 
       onShowToast(`Submission for "${task.title}" uploaded! Waiting for approval.`, "success");
       setSubmissionContent("");
@@ -924,7 +959,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         return (
                           <tr key={task.id}>
                             <td>
-                              <strong>{task.title}</strong>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <strong>{task.title}</strong>
+                                {task.description && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ padding: '0.15rem 0.35rem', background: 'transparent', border: 'none', color: 'var(--text-muted)' }}
+                                    title="View Description"
+                                    onClick={() => setViewingDescription(task.description)}
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                      <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
                             </td>
                             <td>
                               <span className={`task-deadline ${isOverdue ? "urgent" : "upcoming"}`} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
@@ -955,13 +1006,36 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                   Submit Solution
                                 </button>
                               ) : (
-                                <span style={{ color: "var(--text-muted)", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                    <polyline points="22 4 12 14.01 9 11.01" />
-                                  </svg>
-                                  {statusInfo.status === "pending" ? "Pending" : "Completed"}
-                                </span>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                                  <span style={{ color: "var(--text-muted)", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                      <polyline points="22 4 12 14.01 9 11.01" />
+                                    </svg>
+                                    {statusInfo.status === "pending" ? "Pending" : "Completed"}
+                                  </span>
+                                  {!isOverdue && (
+                                    <button
+                                      className="btn btn-secondary btn-sm"
+                                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
+                                      onClick={() => {
+                                        const existingSub = mySubmissions.find((s) => s.taskId === task.id);
+                                        if (existingSub) {
+                                          try {
+                                            const parsed = JSON.parse(existingSub.content);
+                                            setSubText(parsed.text || "");
+                                            setSubmissionContent(parsed.textarea || "");
+                                            setSubLink(parsed.link || "");
+                                          } catch(e) {}
+                                        }
+                                        setActiveSubmitTask(task);
+                                        setIsSubmitModalOpen(true);
+                                      }}
+                                    >
+                                      Edit Solution
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -991,12 +1065,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         <th>Task Title</th>
                         <th>Submitted On</th>
                         <th>Status</th>
+                        <th>Avg Rating</th>
                         <th>EXP Gained</th>
                       </tr>
                     </thead>
                     <tbody>
                       {mySubmissions.map((sub) => {
                         const isExpanded = expandedSubmissionId === sub.id;
+                        const subRatings = historyRatings.filter((r: any) => r.submission_id === sub.id);
+                        const totalRating = subRatings.reduce((sum: number, r: any) => sum + r.rating, 0);
+                        const ratingCount = subRatings.length;
+                        const avgRating = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : "—";
                         return (
                           <React.Fragment key={sub.id}>
                             <tr
@@ -1034,6 +1113,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 </span>
                               </td>
                               <td>
+                                {ratingCount > 0 ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-primary)' }}>
+                                    <span style={{ color: 'var(--accent-gold)' }}>★</span>
+                                    <span>{avgRating}</span>
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>({ratingCount} {ratingCount === 1 ? 'user' : 'users'})</span>
+                                  </div>
+                                ) : (
+                                  <span style={{ color: "var(--text-muted)" }}>—</span>
+                                )}
+                              </td>
+                              <td>
                                 {sub.status === "approved" ? (
                                   <span className="xp-gained-value" style={{ fontWeight: 700 }}>+{sub.xpAwarded} EXP</span>
                                 ) : (
@@ -1043,7 +1133,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             </tr>
                             {isExpanded && (
                               <tr>
-                                <td colSpan={4} style={{ backgroundColor: "rgba(255, 255, 255, 0.01)", padding: "1.25rem 1.5rem", borderTop: "none" }}>
+                                <td colSpan={5} style={{ backgroundColor: "rgba(255, 255, 255, 0.01)", padding: "1.25rem 1.5rem", borderTop: "none" }}>
                                   <div style={{ paddingLeft: "1.25rem", borderLeft: "2px solid var(--border-color)" }}>
                                     <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600 }}>Your Submission Details</h4>
                                     {renderSubmissionContent(sub.content)}
@@ -1458,6 +1548,20 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingDescription && (
+        <div className="modal-overlay" onClick={() => setViewingDescription(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>Task Description</h3>
+              <button className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setViewingDescription(null)}>✕</button>
+            </div>
+            <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text-secondary)', fontSize: '0.9rem', maxHeight: '60vh', overflowY: 'auto' }}>
+              {viewingDescription}
             </div>
           </div>
         </div>

@@ -1513,7 +1513,7 @@ a:hover {
   padding: 0.75rem;
   z-index: 1100;
   box-shadow: var(--shadow-lg), 0 8px 32px rgba(0, 0, 0, 0.6);
-  animation: modalSlideIn 0.2s ease-out forwards;
+  animation: popupCenterSlideIn 0.2s ease-out forwards;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -1678,6 +1678,17 @@ a:hover {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes popupCenterSlideIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -45%) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 
@@ -1851,19 +1862,19 @@ a:hover {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 1.5rem;
-  padding: 2.5rem 1rem 1rem 1rem;
+  gap: 1rem;
+  padding: 2.5rem 0.5rem 1rem 0.5rem;
   width: 100%;
-  max-width: 800px;
+  max-width: 600px;
   margin: 0 auto;
 }
 
 @media (max-width: 640px) {
   .leaderboard-podium {
-    flex-direction: column;
-    align-items: center;
-    gap: 1.5rem;
-    padding-top: 1.5rem;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 0.35rem;
+    padding-top: 2rem;
   }
 }
 
@@ -1873,8 +1884,8 @@ a:hover {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 160px;
-  padding: 1rem 0.5rem;
+  width: 120px;
+  padding: 0.75rem 0.25rem;
   transition: transform var(--transition-normal);
   cursor: default;
   background: transparent !important;
@@ -1882,12 +1893,98 @@ a:hover {
   box-shadow: none !important;
 }
 
+.podium-slot.rank-1 {
+  order: 2;
+  width: 140px;
+  transform: translateY(-12px);
+}
+
+.podium-slot.rank-2 {
+  order: 1;
+}
+
+.podium-slot.rank-3 {
+  order: 3;
+}
+
 .podium-slot:hover {
   transform: translateY(-4px);
 }
 
-.podium-slot.rank-1 {
-  width: 180px;
+.podium-slot.rank-1:hover {
+  transform: translateY(-16px);
+}
+
+@media (max-width: 640px) {
+  .podium-slot {
+    width: 95px;
+    padding: 0.5rem 0.1rem;
+  }
+
+  .podium-slot.rank-1 {
+    order: 2;
+    width: 110px;
+    transform: translateY(-8px);
+  }
+
+  .podium-slot.rank-2 {
+    order: 1;
+  }
+
+  .podium-slot.rank-3 {
+    order: 3;
+  }
+
+  .podium-slot.rank-1:hover {
+    transform: translateY(-12px);
+  }
+
+  .podium-avatar {
+    width: 55px !important;
+    height: 55px !important;
+    font-size: 1.1rem !important;
+  }
+
+  .podium-slot.rank-1 .podium-avatar {
+    width: 70px !important;
+    height: 70px !important;
+    font-size: 1.4rem !important;
+  }
+
+  .crown-container {
+    top: -20px;
+  }
+
+  .crown-container svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  .podium-user-name {
+    font-size: 0.75rem !important;
+    max-width: 85px !important;
+    margin-top: 0.25rem !important;
+  }
+
+  .podium-slot.rank-1 .podium-user-name {
+    font-size: 0.8rem !important;
+    max-width: 100px !important;
+  }
+
+  .podium-user-username {
+    font-size: 0.6rem !important;
+  }
+
+  .podium-xp-text {
+    font-size: 0.65rem !important;
+  }
+
+  .podium-avatar-badge {
+    width: 18px !important;
+    height: 18px !important;
+    font-size: 0.6rem !important;
+    bottom: -4px !important;
+  }
 }
 
 .podium-avatar-container {
