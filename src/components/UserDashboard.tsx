@@ -237,6 +237,102 @@ const renderSubmissionContent = (content: string) => {
   return <div style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem" }}>{content}</div>;
 };
 
+const Pagination: React.FC<{
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}> = ({ currentPage, totalPages, onPageChange }) => {
+  if (totalPages <= 1) return null;
+
+  const getPages = () => {
+    const pages: (number | string)[] = [];
+    if (currentPage === 1) {
+      pages.push(1);
+      if (totalPages >= 2) pages.push(2);
+      if (totalPages >= 3) pages.push(3);
+      if (totalPages > 4) pages.push("...");
+      if (totalPages >= 4) pages.push(totalPages);
+    } else if (currentPage === 2) {
+      pages.push(1, 2);
+      if (totalPages >= 3) pages.push(3);
+      if (totalPages >= 4) pages.push(4);
+      if (totalPages > 5) pages.push("...");
+      if (totalPages >= 5) pages.push(totalPages);
+    } else {
+      pages.push(1);
+      pages.push("...");
+      pages.push(currentPage);
+      if (currentPage + 1 < totalPages) {
+        pages.push(currentPage + 1);
+      }
+      if (currentPage + 2 < totalPages) {
+        pages.push(currentPage + 2);
+      }
+      if (currentPage + 3 < totalPages) {
+        pages.push("...");
+      }
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', marginTop: '1.25rem', padding: '0.5rem 0' }}>
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        disabled={currentPage === 1}
+        onClick={() => onPageChange(currentPage - 1)}
+        style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', fontSize: '0.8rem' }}
+      >
+        Prev
+      </button>
+      {getPages().map((pg, idx) => {
+        if (pg === "...") {
+          return (
+            <span key={`ellipsis-${idx}`} style={{ color: 'var(--text-muted)', padding: '0 0.15rem', fontSize: '0.85rem' }}>
+              ...
+            </span>
+          );
+        }
+        const isCurrent = pg === currentPage;
+        return (
+          <button
+            key={`page-${pg}`}
+            type="button"
+            className={isCurrent ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+            onClick={() => onPageChange(pg as number)}
+            style={{
+              minWidth: '1.75rem',
+              height: '1.75rem',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.8rem',
+              fontWeight: isCurrent ? 700 : 500,
+              backgroundColor: isCurrent ? 'var(--primary)' : 'transparent',
+              borderColor: isCurrent ? 'var(--primary)' : 'var(--border-color)',
+              color: isCurrent ? '#fff' : 'var(--text-secondary)'
+            }}
+          >
+            {pg}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        disabled={currentPage === totalPages}
+        onClick={() => onPageChange(currentPage + 1)}
+        style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', fontSize: '0.8rem' }}
+      >
+        Next
+      </button>
+    </div>
+  );
+};
+
 export const UserDashboard: React.FC<UserDashboardProps> = ({
   onShowToast,
   currentUser,
@@ -246,11 +342,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Navigation tabs: overview, tasks, history, leaderboard, evaluate
   const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "history" | "leaderboard" | "evaluate">("overview");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [evaluateTasks, setEvaluateTasks] = useState<any[]>([]);
   const [evaluateSubmissions, setEvaluateSubmissions] = useState<any[]>([]);
   const [userRatings, setUserRatings] = useState<any[]>([]);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [historyRatings, setHistoryRatings] = useState<any[]>([]);
+  const [expandedEvaluateId, setExpandedEvaluateId] = useState<string | null>(null);
+
+  // Pagination pages
+  const [tasksPage, setTasksPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [evaluatePage, setEvaluatePage] = useState(1);
 
   const [submissionContent, setSubmissionContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -354,8 +455,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       if (tasksError) throw tasksError;
 
       const mappedTasks = (tasksData || []).map(mapTask);
-      setEvaluateTasks(mappedTasks);
-
       const publishedTaskIds = mappedTasks.map(t => t.id);
       if (publishedTaskIds.length > 0) {
         const { data: subsData, error: subsError } = await supabase
@@ -940,111 +1039,118 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <div className="empty-placeholder">
                   No tasks assigned to your account at this time.
                 </div>
-              ) : (
-                <div className="user-table-wrapper">
-                  <table className="user-table">
-                    <thead>
-                      <tr>
-                        <th>Title</th>
-                        <th>Deadline</th>
-                        <th>Status</th>
-                        <th>Reward</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {assignedTasks.map((task) => {
-                        const statusInfo = getTaskStatusInfo(task.id);
-                        const isOverdue = new Date(task.deadline.toDate()) < new Date();
-                        return (
-                          <tr key={task.id}>
-                            <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <strong>{task.title}</strong>
-                                {task.description && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-secondary btn-sm"
-                                    style={{ padding: '0.15rem 0.35rem', background: 'transparent', border: 'none', color: 'var(--text-muted)' }}
-                                    title="View Description"
-                                    onClick={() => setViewingDescription(task.description)}
-                                  >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                      <circle cx="12" cy="12" r="3"></circle>
-                                    </svg>
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                            <td>
-                              <span className={`task-deadline ${isOverdue ? "urgent" : "upcoming"}`} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
-                                {new Date(task.deadline.toDate()).toLocaleString()}
-                              </span>
-                            </td>
-                            <td>
-                              <span className={`status-capsule ${statusInfo.class}`}>
-                                {statusInfo.label}
-                              </span>
-                            </td>
-                            <td>
-                              {task.assignedType === "all" ? (
-                                <span style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>{task.maxXP} EXP</span>
-                              ) : (
-                                <span style={{ color: 'var(--text-muted)' }}>-</span>
-                              )}
-                            </td>
-                            <td>
-                              {statusInfo.status === "active" ? (
-                                <button
-                                  className="btn btn-primary btn-sm"
-                                  onClick={() => {
-                                    setActiveSubmitTask(task);
-                                    setIsSubmitModalOpen(true);
-                                  }}
-                                >
-                                  Submit Solution
-                                </button>
-                              ) : (
-                                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                                  <span style={{ color: "var(--text-muted)", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                      <polyline points="22 4 12 14.01 9 11.01" />
-                                    </svg>
-                                    {statusInfo.status === "pending" ? "Pending" : "Completed"}
-                                  </span>
-                                  {!isOverdue && (
+              ) : (() => {
+                const ITEMS_PER_PAGE = 10;
+                const totalTasksPages = Math.ceil(assignedTasks.length / ITEMS_PER_PAGE);
+                const currentTasksPage = Math.min(tasksPage, Math.max(1, totalTasksPages));
+                const paginatedTasks = assignedTasks.slice((currentTasksPage - 1) * ITEMS_PER_PAGE, currentTasksPage * ITEMS_PER_PAGE);
+                return (
+                  <div className="user-table-wrapper">
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>Deadline</th>
+                          <th>Status</th>
+                          <th>Reward</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedTasks.map((task) => {
+                          const statusInfo = getTaskStatusInfo(task.id);
+                          const isOverdue = new Date(task.deadline.toDate()) < new Date();
+                          return (
+                            <tr key={task.id}>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <strong>{task.title}</strong>
+                                  {task.description && (
                                     <button
+                                      type="button"
                                       className="btn btn-secondary btn-sm"
-                                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
-                                      onClick={() => {
-                                        const existingSub = mySubmissions.find((s) => s.taskId === task.id);
-                                        if (existingSub) {
-                                          try {
-                                            const parsed = JSON.parse(existingSub.content);
-                                            setSubText(parsed.text || "");
-                                            setSubmissionContent(parsed.textarea || "");
-                                            setSubLink(parsed.link || "");
-                                          } catch(e) {}
-                                        }
-                                        setActiveSubmitTask(task);
-                                        setIsSubmitModalOpen(true);
-                                      }}
+                                      style={{ padding: '0.15rem 0.35rem', background: 'transparent', border: 'none', color: 'var(--text-muted)' }}
+                                      title="View Description"
+                                      onClick={() => setViewingDescription(task.description)}
                                     >
-                                      Edit Solution
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                      </svg>
                                     </button>
                                   )}
                                 </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                              </td>
+                              <td>
+                                <span className={`task-deadline ${isOverdue ? "urgent" : "upcoming"}`} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                  {new Date(task.deadline.toDate()).toLocaleString()}
+                                </span>
+                              </td>
+                              <td>
+                                <span className={`status-capsule ${statusInfo.class}`}>
+                                  {statusInfo.label}
+                                </span>
+                              </td>
+                              <td>
+                                {task.assignedType === "all" ? (
+                                  <span style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>{task.maxXP} EXP</span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)' }}>-</span>
+                                )}
+                              </td>
+                              <td>
+                                {statusInfo.status === "active" ? (
+                                  <button
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => {
+                                      setActiveSubmitTask(task);
+                                      setIsSubmitModalOpen(true);
+                                    }}
+                                  >
+                                    Submit Solution
+                                  </button>
+                                ) : (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                                    <span style={{ color: "var(--text-muted)", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                        <polyline points="22 4 12 14.01 9 11.01" />
+                                      </svg>
+                                      {statusInfo.status === "pending" ? "Pending" : "Completed"}
+                                    </span>
+                                    {!isOverdue && (
+                                      <button
+                                        className="btn btn-secondary btn-sm"
+                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
+                                        onClick={() => {
+                                          const existingSub = mySubmissions.find((s) => s.taskId === task.id);
+                                          if (existingSub) {
+                                            try {
+                                              const parsed = JSON.parse(existingSub.content);
+                                              setSubText(parsed.text || "");
+                                              setSubmissionContent(parsed.textarea || "");
+                                              setSubLink(parsed.link || "");
+                                            } catch(e) {}
+                                          }
+                                          setActiveSubmitTask(task);
+                                          setIsSubmitModalOpen(true);
+                                        }}
+                                      >
+                                        Edit Solution
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <Pagination currentPage={currentTasksPage} totalPages={totalTasksPages} onPageChange={setTasksPage} />
+                  </div>
+                );
+              })()}
             </>
           )}
 
@@ -1057,97 +1163,104 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
               {mySubmissions.length === 0 ? (
                 <div className="empty-placeholder">You have not made any submissions yet.</div>
-              ) : (
-                <div className="user-table-wrapper">
-                  <table className="user-table">
-                    <thead>
-                      <tr>
-                        <th>Task Title</th>
-                        <th>Submitted On</th>
-                        <th>Status</th>
-                        <th>Avg Rating</th>
-                        <th>EXP Gained</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mySubmissions.map((sub) => {
-                        const isExpanded = expandedSubmissionId === sub.id;
-                        const subRatings = historyRatings.filter((r: any) => r.submission_id === sub.id);
-                        const totalRating = subRatings.reduce((sum: number, r: any) => sum + r.rating, 0);
-                        const ratingCount = subRatings.length;
-                        const avgRating = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : "—";
-                        return (
-                          <React.Fragment key={sub.id}>
-                            <tr
-                              style={{ cursor: "pointer" }}
-                              onClick={() => setExpandedSubmissionId(isExpanded ? null : sub.id)}
-                            >
-                              <td>
-                                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                                  <svg
-                                    width="12"
-                                    height="12"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                    style={{
-                                      transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
-                                      transition: "transform 0.2s",
-                                      color: "var(--text-muted)"
-                                    }}
-                                  >
-                                    <polyline points="9 18 15 12 9 6" />
-                                  </svg>
-                                  <strong>{sub.taskTitle}</strong>
-                                </div>
-                              </td>
-                              <td>
-                                <span style={{ color: "var(--text-muted)" }}>
-                                  {new Date(sub.submittedAt.toDate()).toLocaleString()}
-                                </span>
-                              </td>
-                              <td>
-                                <span className={`status-capsule ${sub.status}`}>
-                                  {sub.status}
-                                </span>
-                              </td>
-                              <td>
-                                {ratingCount > 0 ? (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-primary)' }}>
-                                    <span style={{ color: 'var(--accent-gold)' }}>★</span>
-                                    <span>{avgRating}</span>
-                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>({ratingCount} {ratingCount === 1 ? 'user' : 'users'})</span>
-                                  </div>
-                                ) : (
-                                  <span style={{ color: "var(--text-muted)" }}>—</span>
-                                )}
-                              </td>
-                              <td>
-                                {sub.status === "approved" ? (
-                                  <span className="xp-gained-value" style={{ fontWeight: 700 }}>+{sub.xpAwarded} EXP</span>
-                                ) : (
-                                  <span style={{ color: "var(--text-muted)" }}>-</span>
-                                )}
-                              </td>
-                            </tr>
-                            {isExpanded && (
-                              <tr>
-                                <td colSpan={5} style={{ backgroundColor: "rgba(255, 255, 255, 0.01)", padding: "1.25rem 1.5rem", borderTop: "none" }}>
-                                  <div style={{ paddingLeft: "1.25rem", borderLeft: "2px solid var(--border-color)" }}>
-                                    <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600 }}>Your Submission Details</h4>
-                                    {renderSubmissionContent(sub.content)}
+              ) : (() => {
+                const ITEMS_PER_PAGE = 10;
+                const totalHistoryPages = Math.ceil(mySubmissions.length / ITEMS_PER_PAGE);
+                const currentHistoryPage = Math.min(historyPage, Math.max(1, totalHistoryPages));
+                const paginatedSubmissions = mySubmissions.slice((currentHistoryPage - 1) * ITEMS_PER_PAGE, currentHistoryPage * ITEMS_PER_PAGE);
+                return (
+                  <div className="user-table-wrapper">
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Task Title</th>
+                          <th>Submitted On</th>
+                          <th>Status</th>
+                          <th>Avg Rating</th>
+                          <th>EXP Gained</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedSubmissions.map((sub) => {
+                          const isExpanded = expandedSubmissionId === sub.id;
+                          const subRatings = historyRatings.filter((r: any) => r.submission_id === sub.id);
+                          const totalRating = subRatings.reduce((sum: number, r: any) => sum + r.rating, 0);
+                          const ratingCount = subRatings.length;
+                          const avgRating = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : "—";
+                          return (
+                            <React.Fragment key={sub.id}>
+                              <tr
+                                style={{ cursor: "pointer" }}
+                                onClick={() => setExpandedSubmissionId(isExpanded ? null : sub.id)}
+                              >
+                                <td>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                    <svg
+                                      width="12"
+                                      height="12"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      style={{
+                                        transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                                        transition: "transform 0.2s",
+                                        color: "var(--text-muted)"
+                                      }}
+                                    >
+                                      <polyline points="9 18 15 12 9 6" />
+                                    </svg>
+                                    <strong>{sub.taskTitle}</strong>
                                   </div>
                                 </td>
+                                <td>
+                                  <span style={{ color: "var(--text-muted)" }}>
+                                    {new Date(sub.submittedAt.toDate()).toLocaleString()}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className={`status-capsule ${sub.status}`}>
+                                    {sub.status}
+                                  </span>
+                                </td>
+                                <td>
+                                  {ratingCount > 0 ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-primary)' }}>
+                                      <span style={{ color: 'var(--accent-gold)' }}>★</span>
+                                      <span>{avgRating}</span>
+                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>({ratingCount} {ratingCount === 1 ? 'user' : 'users'})</span>
+                                    </div>
+                                  ) : (
+                                    <span style={{ color: "var(--text-muted)" }}>—</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {sub.status === "approved" ? (
+                                    <span className="xp-gained-value" style={{ fontWeight: 700 }}>+{sub.xpAwarded} EXP</span>
+                                  ) : (
+                                    <span style={{ color: "var(--text-muted)" }}>-</span>
+                                  )}
+                                </td>
                               </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan={5} style={{ backgroundColor: "rgba(255, 255, 255, 0.01)", padding: "1.25rem 1.5rem", borderTop: "none" }}>
+                                    <div style={{ paddingLeft: "1.25rem", borderLeft: "2px solid var(--border-color)" }}>
+                                      <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600 }}>Your Submission Details</h4>
+                                      {renderSubmissionContent(sub.content)}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <Pagination currentPage={currentHistoryPage} totalPages={totalHistoryPages} onPageChange={setHistoryPage} />
+                  </div>
+                );
+              })()}
             </>
           )}
 
@@ -1294,110 +1407,122 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
                   <div className="spinner"></div>
                 </div>
-              ) : evaluateTasks.length === 0 || evaluateSubmissions.length === 0 ? (
+              ) : evaluateSubmissions.length === 0 ? (
                 <div className="empty-placeholder">
                   No peer submissions available for evaluation at this time.
                 </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  {evaluateTasks.map((task) => {
-                    const subsForTask = evaluateSubmissions.filter(sub => sub.taskId === task.id);
-                    if (subsForTask.length === 0) return null;
-
-                    const pubDate = new Date(task.publishedAt.toDate());
-                    const now = new Date();
-                    const diffMs = now.getTime() - pubDate.getTime();
-                    const remainingMs = Math.max(0, (24 * 60 * 60 * 1000) - diffMs);
-                    const remHours = Math.floor(remainingMs / (1000 * 60 * 60));
-                    const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-
-                    return (
-                      <SpotlightCard
-                        key={task.id}
-                        className="card"
-                        spotlightColor="rgba(99, 102, 241, 0.05)"
-                        style={{ padding: '1.25rem' }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
-                          <div>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{task.title}</h3>
-                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{task.description}</p>
-                          </div>
-                          <span className="status-capsule active" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <circle cx="12" cy="12" r="10" />
-                              <polyline points="12 6 12 12 16 14" />
-                            </svg>
-                            {remHours}h {remMins}m left
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                          {subsForTask.map((sub) => {
-                            const currentRating = userRatings.find(r => r.submission_id === sub.id)?.rating || 0;
-                            const submitterProfile = leaderboardList.find(u => u.uid === sub.userId);
-                            const submitterUsername = submitterProfile?.username || 'user';
-
-                            return (
-                              <div
-                                key={sub.id}
-                                style={{
-                                  padding: '1rem',
-                                  backgroundColor: 'var(--bg-base)',
-                                  borderRadius: 'var(--border-radius-md)',
-                                  border: '1px solid var(--border-color)',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: '0.5rem'
-                                }}
+              ) : (() => {
+                const ITEMS_PER_PAGE = 10;
+                const totalEvaluatePages = Math.ceil(evaluateSubmissions.length / ITEMS_PER_PAGE);
+                const currentEvaluatePage = Math.min(evaluatePage, Math.max(1, totalEvaluatePages));
+                const paginatedEvaluate = evaluateSubmissions.slice((currentEvaluatePage - 1) * ITEMS_PER_PAGE, currentEvaluatePage * ITEMS_PER_PAGE);
+                return (
+                  <div className="user-table-wrapper">
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Task Title</th>
+                          <th>Submitted By</th>
+                          <th>Submitted On</th>
+                          <th>Rating Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedEvaluate.map((sub) => {
+                          const isExpanded = expandedEvaluateId === sub.id;
+                          const currentRating = userRatings.find(r => r.submission_id === sub.id)?.rating || 0;
+                          const submitterProfile = leaderboardList.find(u => u.uid === sub.userId);
+                          const submitterUsername = submitterProfile?.username || 'user';
+                          return (
+                            <React.Fragment key={sub.id}>
+                              <tr
+                                style={{ cursor: "pointer" }}
+                                onClick={() => setExpandedEvaluateId(isExpanded ? null : sub.id)}
                               >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <td>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                    <svg
+                                      width="12"
+                                      height="12"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      style={{
+                                        transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                                        transition: "transform 0.2s",
+                                        color: "var(--text-muted)"
+                                      }}
+                                    >
+                                      <polyline points="9 18 15 12 9 6" />
+                                    </svg>
+                                    <strong>{sub.taskTitle}</strong>
+                                  </div>
+                                </td>
+                                <td>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                                     <div
                                       style={{
-                                        width: '28px',
-                                        height: '28px',
-                                        borderRadius: '50%',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontSize: '0.75rem',
+                                        width: "24px",
+                                        height: "24px",
+                                        borderRadius: "50%",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        fontSize: "0.7rem",
                                         fontWeight: 700,
-                                        color: '#fff',
+                                        color: "#fff",
                                         background: getAvatarGradient(submitterUsername)
                                       }}
                                     >
                                       {getInitials(sub.userName)}
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                      <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>{sub.userName}</span>
-                                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{submitterUsername}</span>
+                                    <div style={{ display: "flex", flexDirection: "column" }}>
+                                      <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{sub.userName}</span>
+                                      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>@{submitterUsername}</span>
                                     </div>
                                   </div>
-                                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                    Submitted: {new Date(sub.submittedAt.toDate()).toLocaleDateString()}
+                                </td>
+                                <td>
+                                  <span style={{ color: "var(--text-muted)" }}>
+                                    {new Date(sub.submittedAt.toDate()).toLocaleString()}
                                   </span>
-                                </div>
-
-                                <div className="submission-content-box" style={{ marginTop: '0.25rem' }}>
-                                  {renderSubmissionContent(sub.content)}
-                                </div>
-
-                                <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.5rem', paddingTop: '0.25rem' }}>
-                                  <SubmissionStarRating
-                                    currentRating={currentRating}
-                                    onRate={(val) => handleRateSubmission(sub.id, val)}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </SpotlightCard>
-                    );
-                  })}
-                </div>
-              )}
+                                </td>
+                                <td>
+                                  {currentRating > 0 ? (
+                                    <span style={{ color: "var(--accent-gold)", fontWeight: 600 }}>★ {currentRating}</span>
+                                  ) : (
+                                    <span style={{ color: "var(--text-muted)" }}>Not Rated</span>
+                                  )}
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan={4} style={{ backgroundColor: "rgba(255, 255, 255, 0.01)", padding: "1.25rem 1.5rem", borderTop: "none" }}>
+                                    <div style={{ paddingLeft: "1.25rem", borderLeft: "2px solid var(--border-color)" }}>
+                                      <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600 }}>Peer Submission Details</h4>
+                                      <div className="submission-content-box" style={{ marginTop: '0.5rem' }}>
+                                        {renderSubmissionContent(sub.content)}
+                                      </div>
+                                      <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.75rem', paddingTop: '0.5rem' }}>
+                                        <SubmissionStarRating
+                                          currentRating={currentRating}
+                                          onRate={(val) => handleRateSubmission(sub.id, val)}
+                                        />
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <Pagination currentPage={currentEvaluatePage} totalPages={totalEvaluatePages} onPageChange={setEvaluatePage} />
+                  </div>
+                );
+              })()}
             </>
           )}
         </main>

@@ -104,6 +104,102 @@ const renderSubmissionContent = (content: string) => {
   return <div style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem" }}>{content}</div>;
 };
 
+const Pagination: React.FC<{
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}> = ({ currentPage, totalPages, onPageChange }) => {
+  if (totalPages <= 1) return null;
+
+  const getPages = () => {
+    const pages: (number | string)[] = [];
+    if (currentPage === 1) {
+      pages.push(1);
+      if (totalPages >= 2) pages.push(2);
+      if (totalPages >= 3) pages.push(3);
+      if (totalPages > 4) pages.push("...");
+      if (totalPages >= 4) pages.push(totalPages);
+    } else if (currentPage === 2) {
+      pages.push(1, 2);
+      if (totalPages >= 3) pages.push(3);
+      if (totalPages >= 4) pages.push(4);
+      if (totalPages > 5) pages.push("...");
+      if (totalPages >= 5) pages.push(totalPages);
+    } else {
+      pages.push(1);
+      pages.push("...");
+      pages.push(currentPage);
+      if (currentPage + 1 < totalPages) {
+        pages.push(currentPage + 1);
+      }
+      if (currentPage + 2 < totalPages) {
+        pages.push(currentPage + 2);
+      }
+      if (currentPage + 3 < totalPages) {
+        pages.push("...");
+      }
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', marginTop: '1.25rem', padding: '0.5rem 0' }}>
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        disabled={currentPage === 1}
+        onClick={() => onPageChange(currentPage - 1)}
+        style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', fontSize: '0.8rem' }}
+      >
+        Prev
+      </button>
+      {getPages().map((pg, idx) => {
+        if (pg === "...") {
+          return (
+            <span key={`ellipsis-${idx}`} style={{ color: 'var(--text-muted)', padding: '0 0.15rem', fontSize: '0.85rem' }}>
+              ...
+            </span>
+          );
+        }
+        const isCurrent = pg === currentPage;
+        return (
+          <button
+            key={`page-${pg}`}
+            type="button"
+            className={isCurrent ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+            onClick={() => onPageChange(pg as number)}
+            style={{
+              minWidth: '1.75rem',
+              height: '1.75rem',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.8rem',
+              fontWeight: isCurrent ? 700 : 500,
+              backgroundColor: isCurrent ? 'var(--primary)' : 'transparent',
+              borderColor: isCurrent ? 'var(--primary)' : 'var(--border-color)',
+              color: isCurrent ? '#fff' : 'var(--text-secondary)'
+            }}
+          >
+            {pg}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        disabled={currentPage === totalPages}
+        onClick={() => onPageChange(currentPage + 1)}
+        style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', fontSize: '0.8rem' }}
+      >
+        Next
+      </button>
+    </div>
+  );
+};
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, currentUser, onBackToUser }) => {
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "users" | "leaderboard">("overview");
@@ -285,6 +381,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const [usersList, setUsersList] = useState<any[]>([]);
   const [tasksList, setTasksList] = useState<any[]>([]);
   const [allSubmissions, setAllSubmissions] = useState<any[]>([]);
+  const [tasksPage, setTasksPage] = useState(1);
+  const [usersPage, setUsersPage] = useState(1);
 
   const fetchUsers = async () => {
     const { data, error } = await supabase
@@ -1242,167 +1340,174 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
               {tasksList.length === 0 ? (
                 <div className="empty-placeholder">No tasks created yet. Click "New Task" to create one.</div>
-              ) : (
-                <div className="user-table-wrapper">
-                  <table className="user-table">
-                    <thead>
-                      <tr>
-                        <th>Title</th>
-                        <th>Deadline</th>
-                        <th>Reward</th>
-                        <th>Assignment</th>
-                        <th>Status</th>
-                        <th>Publish</th>
-                        <th>Submissions</th>
-                        <th style={{ textAlign: 'center' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tasksList.map((task) => {
-                        const isOverdue = new Date(task.deadline.toDate()) < new Date();
-                        const taskSubs = allSubmissions.filter((sub) => sub.taskId === task.id);
-                        const taskPendingCount = taskSubs.filter((sub) => sub.status === "pending").length;
-                        const taskTotalCount = taskSubs.length;
-                        return (
-                          <tr key={task.id}>
-                            <td>
-                              <strong>{task.title}</strong>
-                            </td>
-                            <td>
-                              <span className={`task-deadline ${isOverdue ? "urgent" : "upcoming"}`} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
+              ) : (() => {
+                const ITEMS_PER_PAGE = 10;
+                const totalTasksPages = Math.ceil(tasksList.length / ITEMS_PER_PAGE);
+                const currentTasksPage = Math.min(tasksPage, Math.max(1, totalTasksPages));
+                const paginatedTasks = tasksList.slice((currentTasksPage - 1) * ITEMS_PER_PAGE, currentTasksPage * ITEMS_PER_PAGE);
+                return (
+                  <div className="user-table-wrapper">
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>Deadline</th>
+                          <th>Reward</th>
+                          <th>Assignment</th>
+                          <th>Status</th>
+                          <th>Publish</th>
+                          <th>Submissions</th>
+                          <th style={{ textAlign: 'center' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedTasks.map((task) => {
+                          const isOverdue = new Date(task.deadline.toDate()) < new Date();
+                          const taskSubs = allSubmissions.filter((sub) => sub.taskId === task.id);
+                          const taskPendingCount = taskSubs.filter((sub) => sub.status === "pending").length;
+                          const taskTotalCount = taskSubs.length;
+                          return (
+                            <tr key={task.id}>
+                              <td>
+                                <strong>{task.title}</strong>
+                              </td>
+                              <td>
+                                <span className={`task-deadline ${isOverdue ? "urgent" : "upcoming"}`} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                  {(() => {
+                                    const dateObj = new Date(task.deadline.toDate());
+                                    const day = String(dateObj.getDate()).padStart(2, '0');
+                                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                    const year = dateObj.getFullYear();
+                                    return `${day}/${month}/${year}`;
+                                  })()}
+                                </span>
+                              </td>
+                              <td>
+                                {task.assignedType === "all" ? (
+                                  <span style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>{task.maxXP} EXP</span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)' }}>-</span>
+                                )}
+                              </td>
+                              <td>
+                                {task.assignedType === "all" ? "Open to All" : `${task.assignedUsers?.length || 0} User(s)`}
+                              </td>
+                              <td>
+                                <span className={`status-capsule ${task.status === 'active' ? 'active' : 'pending'}`}>
+                                  {task.status}
+                                </span>
+                              </td>
+                              <td>
                                 {(() => {
-                                  const dateObj = new Date(task.deadline.toDate());
-                                  const day = String(dateObj.getDate()).padStart(2, '0');
-                                  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-                                  const year = dateObj.getFullYear();
-                                  return `${day}/${month}/${year}`;
-                                })()}
-                              </span>
-                            </td>
-                            <td>
-                              {task.assignedType === "all" ? (
-                                <span style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>{task.maxXP} EXP</span>
-                              ) : (
-                                <span style={{ color: 'var(--text-muted)' }}>-</span>
-                              )}
-                            </td>
-                            <td>
-                              {task.assignedType === "all" ? "Open to All" : `${task.assignedUsers?.length || 0} User(s)`}
-                            </td>
-                            <td>
-                              <span className={`status-capsule ${task.status === 'active' ? 'active' : 'pending'}`}>
-                                {task.status}
-                              </span>
-                            </td>
-                            <td>
-                              {(() => {
-                                if (!task.publishedAt) {
-                                  return (
-                                    <button
-                                      type="button"
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.6rem' }}
-                                      onClick={() => handlePublishTask(task.id)}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                                      </svg>
-                                      Publish
-                                    </button>
-                                  );
-                                }
+                                  if (!task.publishedAt) {
+                                    return (
+                                      <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.6rem' }}
+                                        onClick={() => handlePublishTask(task.id)}
+                                      >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                        </svg>
+                                        Publish
+                                      </button>
+                                    );
+                                  }
 
-                                const pubDate = new Date(task.publishedAt.toDate());
-                                const now = new Date();
-                                const diffMs = now.getTime() - pubDate.getTime();
-                                const diffHours = diffMs / (1000 * 60 * 60);
+                                  const pubDate = new Date(task.publishedAt.toDate());
+                                  const now = new Date();
+                                  const diffMs = now.getTime() - pubDate.getTime();
+                                  const diffHours = diffMs / (1000 * 60 * 60);
 
-                                if (diffHours < 24) {
-                                  const remainingMs = (24 * 60 * 60 * 1000) - diffMs;
-                                  const remHours = Math.floor(remainingMs / (1000 * 60 * 60));
-                                  const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+                                  if (diffHours < 24) {
+                                    const remainingMs = (24 * 60 * 60 * 1000) - diffMs;
+                                    const remHours = Math.floor(remainingMs / (1000 * 60 * 60));
+                                    const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                        <span className="status-capsule active" style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', width: 'fit-content' }}>
+                                          Published
+                                        </span>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                          {remHours}h {remMins}m left
+                                        </span>
+                                        <button
+                                          type="button"
+                                          style={{ fontSize: '0.65rem', color: 'var(--primary-hover)', background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', textDecoration: 'underline' }}
+                                          onClick={() => handlePublishTask(task.id)}
+                                        >
+                                          Re-publish
+                                        </button>
+                                      </div>
+                                    );
+                                  }
+
                                   return (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                      <span className="status-capsule active" style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', width: 'fit-content' }}>
-                                        Published
-                                      </span>
-                                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                        {remHours}h {remMins}m left
+                                      <span className="status-capsule pending" style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', backgroundColor: 'var(--danger)', color: '#fff', width: 'fit-content' }}>
+                                        Expired
                                       </span>
                                       <button
                                         type="button"
                                         style={{ fontSize: '0.65rem', color: 'var(--primary-hover)', background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handlePublishTask(task.id)}
                                       >
-                                        Re-publish
+                                        Publish again
                                       </button>
                                     </div>
                                   );
-                                }
-
-                                return (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                    <span className="status-capsule pending" style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', backgroundColor: 'var(--danger)', color: '#fff', width: 'fit-content' }}>
-                                      Expired
-                                    </span>
-                                    <button
-                                      type="button"
-                                      style={{ fontSize: '0.65rem', color: 'var(--primary-hover)', background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', textDecoration: 'underline' }}
-                                      onClick={() => handlePublishTask(task.id)}
-                                    >
-                                      Publish again
-                                    </button>
-                                  </div>
-                                );
-                              })()}
-                            </td>
-                            <td>
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                disabled={taskTotalCount === 0}
-                                onClick={() => {
-                                  setSelectedTaskForSubmissions(task);
-                                  setIsSubmissionsModalOpen(true);
-                                }}
-                              >
-                                View ({taskPendingCount} Pnd / {taskTotalCount} Tot)
-                              </button>
-                            </td>
-                            <td>
-                              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                })()}
+                              </td>
+                              <td>
                                 <button
-                                  type="button"
-                                  className="action-icon-btn edit-btn"
-                                  title="Edit Task"
-                                  onClick={() => handleEditClick(task)}
+                                  className="btn btn-secondary btn-sm"
+                                  disabled={taskTotalCount === 0}
+                                  onClick={() => {
+                                    setSelectedTaskForSubmissions(task);
+                                    setIsSubmissionsModalOpen(true);
+                                  }}
                                 >
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                    <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                  </svg>
+                                  View ({taskPendingCount} Pnd / {taskTotalCount} Tot)
                                 </button>
-                                <button
-                                  type="button"
-                                  className="action-icon-btn delete-btn"
-                                  title="Delete Task"
-                                  onClick={() => handleDeleteTask(task.id)}
-                                >
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                    <line x1="10" y1="11" x2="10" y2="17" />
-                                    <line x1="14" y1="11" x2="14" y2="17" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                  <button
+                                    type="button"
+                                    className="action-icon-btn edit-btn"
+                                    title="Edit Task"
+                                    onClick={() => handleEditClick(task)}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="action-icon-btn delete-btn"
+                                    title="Delete Task"
+                                    onClick={() => handleDeleteTask(task.id)}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="3 6 5 6 21 6" />
+                                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                      <line x1="10" y1="11" x2="10" y2="17" />
+                                      <line x1="14" y1="11" x2="14" y2="17" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <Pagination currentPage={currentTasksPage} totalPages={totalTasksPages} onPageChange={setTasksPage} />
+                  </div>
+                );
+              })()}
             </>
           )}
 
@@ -1428,79 +1533,102 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
               <p className="dashboard-view-desc">Register new user logins or view registered user lists.</p>
 
               <div className="user-table-wrapper">
-                <table className="user-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Username</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th>EXP Balance</th>
-                      <th style={{ textAlign: 'center' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usersList.length === 0 ? (
+                {usersList.length === 0 ? (
+                  <table className="user-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>EXP Balance</th>
+                        <th style={{ textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
                       <tr>
                         <td colSpan={6} style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem" }}>
                           No registered users found. Click "New User" to add one.
                         </td>
                       </tr>
-                    ) : (
-                      usersList.map((user) => (
-                        <tr key={user.uid}>
-                          <td><strong>{user.name}</strong></td>
-                          <td>@{user.username}</td>
-                          <td>{user.email}</td>
-                          <td>
-                            <span className="brand-badge" style={{ fontSize: "0.6rem", padding: "0.15rem 0.35rem" }}>
-                              {user.role}
-                            </span>
-                          </td>
-                          <td style={{ color: "var(--primary-hover)", fontWeight: "700" }}>{user.xp} EXP</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                              <button
-                                type="button"
-                                className="action-icon-btn edit-btn"
-                                title="Edit User"
-                                onClick={() => handleEditUserClick(user)}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                  <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                className="action-icon-btn reset-btn"
-                                title="Reset Password"
-                                onClick={() => handleResetPassword(user.uid, user.username)}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                className="action-icon-btn delete-btn"
-                                title="Delete User"
-                                onClick={() => handleDeleteUser(user.uid, user.email)}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <polyline points="3 6 5 6 21 6" />
-                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                  <line x1="10" y1="11" x2="10" y2="17" />
-                                  <line x1="14" y1="11" x2="14" y2="17" />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                ) : (() => {
+                  const ITEMS_PER_PAGE = 10;
+                  const totalUsersPages = Math.ceil(usersList.length / ITEMS_PER_PAGE);
+                  const currentUsersPage = Math.min(usersPage, Math.max(1, totalUsersPages));
+                  const paginatedUsers = usersList.slice((currentUsersPage - 1) * ITEMS_PER_PAGE, currentUsersPage * ITEMS_PER_PAGE);
+                  return (
+                    <>
+                      <table className="user-table">
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>EXP Balance</th>
+                            <th style={{ textAlign: 'center' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedUsers.map((user) => (
+                            <tr key={user.uid}>
+                              <td><strong>{user.name}</strong></td>
+                              <td>@{user.username}</td>
+                              <td>{user.email}</td>
+                              <td>
+                                <span className="brand-badge" style={{ fontSize: "0.6rem", padding: "0.15rem 0.35rem" }}>
+                                  {user.role}
+                                </span>
+                              </td>
+                              <td style={{ color: "var(--primary-hover)", fontWeight: "700" }}>{user.xp} EXP</td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                  <button
+                                    type="button"
+                                    className="action-icon-btn edit-btn"
+                                    title="Edit User"
+                                    onClick={() => handleEditUserClick(user)}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="action-icon-btn reset-btn"
+                                    title="Reset Password"
+                                    onClick={() => handleResetPassword(user.uid, user.username)}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="action-icon-btn delete-btn"
+                                    title="Delete User"
+                                    onClick={() => handleDeleteUser(user.uid, user.email)}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="3 6 5 6 21 6" />
+                                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                      <line x1="10" y1="11" x2="10" y2="17" />
+                                      <line x1="14" y1="11" x2="14" y2="17" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <Pagination currentPage={currentUsersPage} totalPages={totalUsersPages} onPageChange={setUsersPage} />
+                    </>
+                  );
+                })()}
               </div>
             </>
           )}
