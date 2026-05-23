@@ -9,9 +9,16 @@ This guide provides step-by-step instructions to integrate native Google Sign-In
 To allow authentication on Android devices, Google requires you to register the application's unique SHA-1 fingerprint.
 
 ### 1.1 Generate Android SHA-1 Fingerprint
-Run the following command in your terminal to extract the SHA-1 fingerprint from the local debug keystore:
-```bash
-keytool -list -v -alias androiddebugkey -keystore %USERPROFILE%\.android\debug.keystore -storepass android
+Run the command matching your shell to extract the SHA-1 fingerprint from the local debug keystore:
+
+**For PowerShell:**
+```powershell
+keytool -list -v -alias androiddebugkey -keystore "$env:USERPROFILE\.android\debug.keystore" -storepass android
+```
+
+**For Command Prompt (CMD):**
+```cmd
+keytool -list -v -alias androiddebugkey -keystore "%USERPROFILE%\.android\debug.keystore" -storepass android
 ```
 Copy the **SHA-1** hex string printed in the command output.
 
