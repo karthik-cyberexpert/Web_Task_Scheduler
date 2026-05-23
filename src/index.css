@@ -1318,6 +1318,10 @@ a:hover {
     display: block;
   }
 
+  .brand-section .brand-badge {
+    display: none;
+  }
+
   .sidebar-backdrop {
     display: block;
     position: fixed;
