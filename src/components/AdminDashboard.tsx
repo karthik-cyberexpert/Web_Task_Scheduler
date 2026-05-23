@@ -1936,144 +1936,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
               </form>
             </div>
           </div>
-
-          {isCalendarPopupOpen && taskStep === 2 && (
-            <>
-              <div
-                style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  zIndex: 1090,
-                  background: 'transparent',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsCalendarPopupOpen(false);
-                }}
-              />
-              <div
-                className="calendar-popup-card"
-                onClick={(e) => e.stopPropagation()}
-                style={{ zIndex: 1100 }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {!selectedCalendarDate ? (
-                    <>
-                      {/* Month selector header */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          style={{ padding: '0.2rem 0.4rem', minWidth: '28px', fontSize: '0.75rem' }}
-                          onClick={handlePrevMonth}
-                        >
-                          &larr;
-                        </button>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {getMonthName(currentCalendarMonth)} {currentCalendarYear}
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          style={{ padding: '0.2rem 0.4rem', minWidth: '28px', fontSize: '0.75rem' }}
-                          onClick={handleNextMonth}
-                        >
-                          &rarr;
-                        </button>
-                      </div>
-                      
-                      {/* Days of week and days grid */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', padding: '0.35rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-color)' }}>
-                        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
-                          <div key={d} style={{ textAlign: 'center', fontSize: '0.65rem', fontWeight: '700', color: 'var(--text-muted)', padding: '0.1rem 0' }}>
-                            {d}
-                          </div>
-                        ))}
-                        {renderCalendarDays()}
-                      </div>
-                    </>
-                  ) : (
-                    /* Selected date / time details */
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.25rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Date: <strong style={{ color: 'var(--text-primary)' }}>{selectedCalendarDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</strong>
-                        </div>
-                        <button
-                          type="button"
-                          style={{ background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', padding: 0 }}
-                          onClick={() => {
-                            setSelectedCalendarDate(null);
-                          }}
-                        >
-                          Change Date
-                        </button>
-                      </div>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', margin: '0.25rem 0' }}>
-                        <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginRight: '0.25rem' }}>Time (24h):</label>
-                        <input
-                          type="number"
-                          min={0}
-                          max={23}
-                          className="form-control"
-                          style={{ padding: '0.25rem', width: '55px', textAlign: 'center', fontSize: '0.75rem', height: '30px' }}
-                          value={calendarHour}
-                          onChange={(e) => {
-                            let val = e.target.value;
-                            setCalendarHour(val);
-                            updateDeadlineFromCalendar(selectedCalendarDate, val, calendarMinute);
-                          }}
-                          onBlur={(e) => {
-                            let val = parseInt(e.target.value, 10);
-                            if (isNaN(val) || val < 0) val = 0;
-                            if (val > 23) val = 23;
-                            const formatted = String(val).padStart(2, '0');
-                            setCalendarHour(formatted);
-                            updateDeadlineFromCalendar(selectedCalendarDate, formatted, calendarMinute);
-                          }}
-                        />
-                        <span style={{ color: 'var(--text-muted)', fontWeight: 'bold', fontSize: '0.75rem' }}>:</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={59}
-                          className="form-control"
-                          style={{ padding: '0.25rem', width: '55px', textAlign: 'center', fontSize: '0.75rem', height: '30px' }}
-                          value={calendarMinute}
-                          onChange={(e) => {
-                            let val = e.target.value;
-                            setCalendarMinute(val);
-                            updateDeadlineFromCalendar(selectedCalendarDate, calendarHour, val);
-                          }}
-                          onBlur={(e) => {
-                            let val = parseInt(e.target.value, 10);
-                            if (isNaN(val) || val < 0) val = 0;
-                            if (val > 59) val = 59;
-                            const formatted = String(val).padStart(2, '0');
-                            setCalendarMinute(formatted);
-                            updateDeadlineFromCalendar(selectedCalendarDate, calendarHour, formatted);
-                          }}
-                        />
-                      </div>
-
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        style={{ width: '100%', marginTop: '0.25rem', height: '28px', fontSize: '0.75rem', padding: '0' }}
-                        onClick={() => setIsCalendarPopupOpen(false)}
-                      >
-                        Confirm & Save
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
         </div>
       )}
 
@@ -2320,6 +2182,145 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             </div>
           </div>
         </div>
+      )}
+
+      {isCalendarPopupOpen && taskStep === 2 && (
+        <>
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 1090,
+              background: 'rgba(0, 0, 0, 0.4)',
+              backdropFilter: 'blur(2px)',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsCalendarPopupOpen(false);
+            }}
+          />
+          <div
+            className="calendar-popup-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ zIndex: 1100 }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {!selectedCalendarDate ? (
+                <>
+                  {/* Month selector header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.2rem 0.4rem', minWidth: '28px', fontSize: '0.75rem' }}
+                      onClick={handlePrevMonth}
+                    >
+                      &larr;
+                    </button>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {getMonthName(currentCalendarMonth)} {currentCalendarYear}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.2rem 0.4rem', minWidth: '28px', fontSize: '0.75rem' }}
+                      onClick={handleNextMonth}
+                    >
+                      &rarr;
+                    </button>
+                  </div>
+                  
+                  {/* Days of week and days grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', padding: '0.35rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-color)' }}>
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
+                      <div key={d} style={{ textAlign: 'center', fontSize: '0.65rem', fontWeight: '700', color: 'var(--text-muted)', padding: '0.1rem 0' }}>
+                        {d}
+                      </div>
+                    ))}
+                    {renderCalendarDays()}
+                  </div>
+                </>
+              ) : (
+                /* Selected date / time details */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Date: <strong style={{ color: 'var(--text-primary)' }}>{selectedCalendarDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      style={{ background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', padding: 0 }}
+                      onClick={() => {
+                        setSelectedCalendarDate(null);
+                      }}
+                    >
+                      Change Date
+                    </button>
+                  </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', margin: '0.25rem 0' }}>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginRight: '0.25rem' }}>Time (24h):</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={23}
+                      className="form-control"
+                      style={{ padding: '0.25rem', width: '55px', textAlign: 'center', fontSize: '0.75rem', height: '30px' }}
+                      value={calendarHour}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        setCalendarHour(val);
+                        updateDeadlineFromCalendar(selectedCalendarDate, val, calendarMinute);
+                      }}
+                      onBlur={(e) => {
+                        let val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val < 0) val = 0;
+                        if (val > 23) val = 23;
+                        const formatted = String(val).padStart(2, '0');
+                        setCalendarHour(formatted);
+                        updateDeadlineFromCalendar(selectedCalendarDate, formatted, calendarMinute);
+                      }}
+                    />
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 'bold', fontSize: '0.75rem' }}>:</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      className="form-control"
+                      style={{ padding: '0.25rem', width: '55px', textAlign: 'center', fontSize: '0.75rem', height: '30px' }}
+                      value={calendarMinute}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        setCalendarMinute(val);
+                        updateDeadlineFromCalendar(selectedCalendarDate, calendarHour, val);
+                      }}
+                      onBlur={(e) => {
+                        let val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val < 0) val = 0;
+                        if (val > 59) val = 59;
+                        const formatted = String(val).padStart(2, '0');
+                        setCalendarMinute(formatted);
+                        updateDeadlineFromCalendar(selectedCalendarDate, calendarHour, formatted);
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ width: '100%', marginTop: '0.25rem', height: '28px', fontSize: '0.75rem', padding: '0' }}
+                    onClick={() => setIsCalendarPopupOpen(false)}
+                  >
+                    Confirm & Save
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

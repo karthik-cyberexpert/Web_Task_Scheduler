@@ -1502,7 +1502,7 @@ a:hover {
 }
 
 .calendar-popup-card {
-  position: absolute;
+  position: fixed;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
@@ -1518,12 +1518,6 @@ a:hover {
   flex-direction: column;
   gap: 0.5rem;
   flex-shrink: 0;
-}
-
-@media (max-width: 768px) {
-  .calendar-popup-card {
-    position: fixed;
-  }
 }
 
 /* Hide spin arrows for number inputs in calendar card */
