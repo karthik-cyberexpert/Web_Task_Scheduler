@@ -158,6 +158,7 @@ export const Login: React.FC<LoginProps> = ({ onShowToast }) => {
       <SpotlightCard className="auth-card" spotlightColor="rgba(99, 102, 241, 0.12)">
         <div className="auth-header">
           <div className="auth-logo">
+            <img src="/favicon.svg" alt="Sydions Logo" style={{ width: '52px', height: '52px', display: 'block', margin: '0 auto 0.75rem', filter: 'drop-shadow(0 0 16px rgba(134,59,255,0.6))' }} />
             <ShinyText text="Sydions Scheduler" speed={3.5} />
           </div>
           <p className="auth-subtitle">
