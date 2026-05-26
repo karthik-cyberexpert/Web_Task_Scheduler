@@ -698,9 +698,30 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       
       let insertErr;
       if (existingSub) {
+        if (existingSub.xpAwarded > 0) {
+          const { data: userData, error: fetchErr } = await supabase
+            .from("users")
+            .select("xp")
+            .eq("uid", currentUser.uid)
+            .maybeSingle();
+
+          if (fetchErr) throw new Error(fetchErr.message);
+
+          const currentXp = userData?.xp || 0;
+          const newXp = Math.max(0, currentXp - existingSub.xpAwarded);
+
+          const { error: userErr } = await supabase
+            .from("users")
+            .update({ xp: newXp })
+            .eq("uid", currentUser.uid);
+
+          if (userErr) throw new Error(userErr.message);
+        }
+
         const { error } = await supabase.from("submissions").update({
           content: contentString,
           status: "pending",
+          xp_awarded: 0,
           submitted_at: new Date().toISOString(),
         }).eq("id", existingSub.id);
         insertErr = error;
