@@ -1724,7 +1724,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
               )}
             </svg>
           </button>
-          <div className="brand-logo">
+          <div className="brand-logo" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <img src="/favicon.svg" alt="Sydions Logo" style={{ width: '26px', height: '26px', display: 'block', flexShrink: 0 }} />
             <ShinyText text="Sydions Portal" speed={3.5} />
           </div>
           <div className="brand-badge">Admin Panel</div>
