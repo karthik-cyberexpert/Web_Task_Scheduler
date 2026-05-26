@@ -173,6 +173,121 @@ const App: React.FC = () => {
       {/* Main Screen Router */}
       {!currentUser ? (
         <Login onShowToast={showToast} />
+      ) : userProfile?.is_banned ? (
+        <div className="auth-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '1rem' }}>
+          <div className="login-card" style={{ maxWidth: "500px", width: '100%', textAlign: "center", padding: "3rem 2rem", background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-lg)', boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ 
+              width: "80px", 
+              height: "80px", 
+              borderRadius: "50%", 
+              backgroundColor: "rgba(239, 68, 68, 0.1)", 
+              border: "1px solid rgba(239, 68, 68, 0.2)",
+              color: "var(--danger)",
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center", 
+              margin: "0 auto 1.5rem" 
+            }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+              </svg>
+            </div>
+            
+            <h2 style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: "1rem" }}>
+              Account Restricted
+            </h2>
+            
+            <p style={{ color: "var(--text-secondary)", fontSize: "1rem", lineHeight: "1.6", marginBottom: "1.5rem" }}>
+              You have been banned by the system, please contact the admin personally for activate your account again.
+            </p>
+
+            <div style={{ 
+              background: "rgba(239, 68, 68, 0.05)", 
+              border: "1px solid rgba(239, 68, 68, 0.15)", 
+              borderRadius: "var(--border-radius-md)", 
+              padding: "1rem 1.25rem", 
+              marginBottom: "2rem",
+              textAlign: "left"
+            }}>
+              <strong style={{ fontSize: "0.8rem", color: "var(--danger)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: "0.5rem", fontWeight: 700 }}>
+                Reason for Ban:
+              </strong>
+              <p style={{ color: "var(--text-primary)", fontSize: "0.95rem", margin: 0, fontStyle: "italic" }}>
+                {userProfile.ban_reason || "No specific reason provided."}
+              </p>
+            </div>
+
+            <button 
+              className="btn btn-secondary btn-block" 
+              onClick={async () => {
+                await authSignOut(auth);
+                showToast("Logged out successfully.", "success");
+              }}
+            >
+              Log Out
+            </button>
+          </div>
+        </div>
+      ) : userProfile?.suspended_until && new Date(userProfile.suspended_until) > new Date() ? (
+        <div className="auth-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '1rem' }}>
+          <div className="login-card" style={{ maxWidth: "500px", width: '100%', textAlign: "center", padding: "3rem 2rem", background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-lg)', boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ 
+              width: "80px", 
+              height: "80px", 
+              borderRadius: "50%", 
+              backgroundColor: "rgba(245, 158, 11, 0.1)", 
+              border: "1px solid rgba(245, 158, 11, 0.2)",
+              color: "var(--accent-gold)",
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center", 
+              margin: "0 auto 1.5rem" 
+            }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+                <polyline points="12 14 12 16 14 16" />
+              </svg>
+            </div>
+            
+            <h2 style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: "1rem" }}>
+              Account Suspended
+            </h2>
+            
+            <p style={{ color: "var(--text-secondary)", fontSize: "1rem", lineHeight: "1.6", marginBottom: "1.5rem" }}>
+              You have been suspended by the system, please contact the admin personally for activate your account again.
+            </p>
+
+            <div style={{ 
+              background: "rgba(245, 158, 11, 0.05)", 
+              border: "1px solid rgba(245, 158, 11, 0.15)", 
+              borderRadius: "var(--border-radius-md)", 
+              padding: "1rem 1.25rem", 
+              marginBottom: "2rem",
+              textAlign: "left"
+            }}>
+              <strong style={{ fontSize: "0.8rem", color: "var(--accent-gold)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: "0.5rem", fontWeight: 700 }}>
+                Suspension Ends:
+              </strong>
+              <p style={{ color: "var(--text-primary)", fontSize: "0.95rem", margin: 0, fontWeight: 500 }}>
+                {new Date(userProfile.suspended_until).toLocaleString()}
+              </p>
+            </div>
+
+            <button 
+              className="btn btn-secondary btn-block" 
+              onClick={async () => {
+                await authSignOut(auth);
+                showToast("Logged out successfully.", "success");
+              }}
+            >
+              Log Out
+            </button>
+          </div>
+        </div>
       ) : userProfile?.role === "admin" && adminView === "admin" ? (
         <AdminDashboard
           onShowToast={showToast}

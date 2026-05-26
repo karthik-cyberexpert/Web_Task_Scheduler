@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS public.users (
   role text not null default 'user',
   xp integer not null default 0,
   onboarding boolean not null default false,
+  is_banned boolean not null default false,
+  ban_reason text default null,
+  suspended_until timestamp with time zone default null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

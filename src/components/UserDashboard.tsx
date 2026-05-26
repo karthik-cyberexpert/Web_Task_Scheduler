@@ -21,6 +21,9 @@ const mapUser = (u: any) => ({
   name: u.name,
   role: u.role,
   xp: u.xp,
+  isBanned: u.is_banned ?? false,
+  banReason: u.ban_reason ?? "",
+  suspendedUntil: u.suspended_until || null,
   createdAt: { toDate: () => new Date(u.created_at) }
 });
 

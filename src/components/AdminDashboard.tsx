@@ -22,6 +22,9 @@ const mapUser = (u: any) => ({
   name: u.name,
   role: u.role,
   xp: u.xp,
+  isBanned: u.is_banned ?? false,
+  banReason: u.ban_reason ?? "",
+  suspendedUntil: u.suspended_until || null,
   createdAt: { toDate: () => new Date(u.created_at) }
 });
 
@@ -227,6 +230,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const [newUserEmail, setNewUserEmail] = useState("");
   const [userCreating, setUserCreating] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [activeUserMenuId, setActiveUserMenuId] = useState<string | null>(null);
   const [newUserRole, setNewUserRole] = useState<"user" | "admin">("user");
 
   const [taskTitle, setTaskTitle] = useState("");
@@ -769,6 +773,98 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     } catch (err: any) {
       console.error("Error resetting password:", err);
       onShowToast(err.message || "Failed to reset password.", "error");
+    }
+  };
+
+  const handleToggleBanUser = async (user: any) => {
+    if (user.uid === currentUser.uid) {
+      onShowToast("You cannot ban your own admin account.", "error");
+      return;
+    }
+
+    if (user.isBanned) {
+      if (!window.confirm(`Are you sure you want to unban @${user.username}?`)) return;
+      try {
+        const { error } = await supabase
+          .from("users")
+          .update({ is_banned: false, ban_reason: null })
+          .eq("uid", user.uid);
+
+        if (error) throw error;
+        onShowToast(`User @${user.username} has been unbanned.`, "success");
+        fetchUsers();
+      } catch (err: any) {
+        console.error("Error unbanning user:", err);
+        onShowToast(err.message || "Failed to unban user.", "error");
+      }
+    } else {
+      const reason = window.prompt(`Enter the reason for banning @${user.username}:`);
+      if (reason === null) return; // Cancelled
+      const cleanReason = reason.trim() || "No reason specified by administrator.";
+
+      try {
+        const { error } = await supabase
+          .from("users")
+          .update({ is_banned: true, ban_reason: cleanReason })
+          .eq("uid", user.uid);
+
+        if (error) throw error;
+        onShowToast(`User @${user.username} has been banned.`, "success");
+        fetchUsers();
+      } catch (err: any) {
+        console.error("Error banning user:", err);
+        onShowToast(err.message || "Failed to ban user.", "error");
+      }
+    }
+  };
+
+  const handleToggleSuspendUser = async (user: any) => {
+    if (user.uid === currentUser.uid) {
+      onShowToast("You cannot suspend your own admin account.", "error");
+      return;
+    }
+
+    const currentlySuspended = user.suspendedUntil && new Date(user.suspendedUntil) > new Date();
+
+    if (currentlySuspended) {
+      if (!window.confirm(`Are you sure you want to revoke the suspension for @${user.username}?`)) return;
+      try {
+        const { error } = await supabase
+          .from("users")
+          .update({ suspended_until: null })
+          .eq("uid", user.uid);
+
+        if (error) throw error;
+        onShowToast(`Suspension for @${user.username} has been revoked.`, "success");
+        fetchUsers();
+      } catch (err: any) {
+        console.error("Error revoking suspension:", err);
+        onShowToast(err.message || "Failed to revoke suspension.", "error");
+      }
+    } else {
+      const hoursStr = window.prompt(`Enter suspension duration in hours for @${user.username}:`, "24");
+      if (hoursStr === null) return; // Cancelled
+      const hours = Number(hoursStr);
+      if (isNaN(hours) || hours <= 0) {
+        onShowToast("Please enter a valid positive number for hours.", "error");
+        return;
+      }
+
+      const suspendedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+
+      try {
+        const { error } = await supabase
+          .from("users")
+          .update({ suspended_until: suspendedUntil })
+          .eq("uid", user.uid);
+
+        if (error) throw error;
+        onShowToast(`User @${user.username} has been suspended for ${hours} hours.`, "success");
+        fetchUsers();
+      } catch (err: any) {
+        console.error("Error suspending user:", err);
+        onShowToast(err.message || "Failed to suspend user.", "error");
+      }
     }
   };
 
@@ -1572,57 +1668,272 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                           </tr>
                         </thead>
                         <tbody>
-                          {paginatedUsers.map((user) => (
-                            <tr key={user.uid}>
-                              <td><strong>{user.name}</strong></td>
-                              <td>@{user.username}</td>
-                              <td>{user.email}</td>
-                              <td>
-                                <span className="brand-badge" style={{ fontSize: "0.6rem", padding: "0.15rem 0.35rem" }}>
-                                  {user.role}
-                                </span>
-                              </td>
-                              <td style={{ color: "var(--primary-hover)", fontWeight: "700" }}>{user.xp} EXP</td>
-                              <td>
-                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                                  <button
-                                    type="button"
-                                    className="action-icon-btn edit-btn"
-                                    title="Edit User"
-                                    onClick={() => handleEditUserClick(user)}
-                                  >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                      <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                    </svg>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="action-icon-btn reset-btn"
-                                    title="Reset Password"
-                                    onClick={() => handleResetPassword(user.uid, user.username)}
-                                  >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-                                    </svg>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="action-icon-btn delete-btn"
-                                    title="Delete User"
-                                    onClick={() => handleDeleteUser(user.uid, user.email)}
-                                  >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                      <polyline points="3 6 5 6 21 6" />
-                                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                      <line x1="10" y1="11" x2="10" y2="17" />
-                                      <line x1="14" y1="11" x2="14" y2="17" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                          {paginatedUsers.map((user) => {
+                            const isSuspended = user.suspendedUntil && new Date(user.suspendedUntil) > new Date();
+                            return (
+                              <tr key={user.uid} style={{ opacity: (user.isBanned || isSuspended) ? 0.75 : 1 }}>
+                                <td>
+                                  <strong>{user.name}</strong>
+                                  {user.isBanned && (
+                                    <span className="brand-badge" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.2)', marginLeft: '0.5rem', fontSize: '0.6rem', padding: '0.1rem 0.35rem' }}>
+                                      Banned
+                                    </span>
+                                  )}
+                                  {isSuspended && (
+                                    <span className="brand-badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: 'var(--accent-gold)', borderColor: 'rgba(245, 158, 11, 0.2)', marginLeft: '0.5rem', fontSize: '0.6rem', padding: '0.1rem 0.35rem' }}>
+                                      Suspended
+                                    </span>
+                                  )}
+                                </td>
+                                <td>@{user.username}</td>
+                                <td>{user.email}</td>
+                                <td>
+                                  <span className="brand-badge" style={{ fontSize: "0.6rem", padding: "0.15rem 0.35rem" }}>
+                                    {user.role}
+                                  </span>
+                                </td>
+                                <td style={{ color: "var(--primary-hover)", fontWeight: "700" }}>{user.xp} EXP</td>
+                                <td>
+                                  <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
+                                    <button
+                                      type="button"
+                                      className="action-icon-btn edit-btn"
+                                      title="Actions"
+                                      onClick={() => setActiveUserMenuId(activeUserMenuId === user.uid ? null : user.uid)}
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="1.5" />
+                                        <circle cx="12" cy="5" r="1.5" />
+                                        <circle cx="12" cy="19" r="1.5" />
+                                      </svg>
+                                    </button>
+                                    
+                                    {activeUserMenuId === user.uid && (
+                                      <>
+                                        <div 
+                                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} 
+                                          onClick={() => setActiveUserMenuId(null)}
+                                        />
+                                        <div style={{
+                                          position: 'absolute',
+                                          right: 0,
+                                          top: '100%',
+                                          backgroundColor: 'var(--bg-surface-elevated)',
+                                          border: '1px solid var(--border-light)',
+                                          borderRadius: 'var(--border-radius-sm)',
+                                          boxShadow: 'var(--shadow-lg)',
+                                          zIndex: 999,
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          minWidth: '170px',
+                                          padding: '0.35rem 0',
+                                          marginTop: '0.35rem'
+                                        }}>
+                                          {/* Edit Profile */}
+                                          <button
+                                            type="button"
+                                            className="dropdown-item"
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '0.625rem',
+                                              padding: '0.5rem 1rem',
+                                              background: 'none',
+                                              border: 'none',
+                                              color: 'var(--text-primary)',
+                                              fontSize: '0.825rem',
+                                              textAlign: 'left',
+                                              cursor: 'pointer',
+                                              width: '100%',
+                                              fontFamily: 'var(--font-sans)',
+                                              transition: 'background 0.15s ease'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                            onClick={() => {
+                                              setActiveUserMenuId(null);
+                                              handleEditUserClick(user);
+                                            }}
+                                          >
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-secondary)' }}>
+                                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                              <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                            </svg>
+                                            Edit Profile
+                                          </button>
+
+                                          {/* Ban/Unban */}
+                                          <button
+                                            type="button"
+                                            className="dropdown-item"
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '0.625rem',
+                                              padding: '0.5rem 1rem',
+                                              background: 'none',
+                                              border: 'none',
+                                              color: user.isBanned ? 'var(--success)' : 'var(--danger)',
+                                              fontSize: '0.825rem',
+                                              textAlign: 'left',
+                                              cursor: 'pointer',
+                                              width: '100%',
+                                              fontFamily: 'var(--font-sans)',
+                                              transition: 'background 0.15s ease'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                            onClick={() => {
+                                              setActiveUserMenuId(null);
+                                              handleToggleBanUser(user);
+                                            }}
+                                          >
+                                            {user.isBanned ? (
+                                              <>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                                  <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                                                </svg>
+                                                Unban User
+                                              </>
+                                            ) : (
+                                              <>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                                </svg>
+                                                Ban User
+                                              </>
+                                            )}
+                                          </button>
+
+                                          {/* Suspend/Revoke */}
+                                          <button
+                                            type="button"
+                                            className="dropdown-item"
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '0.625rem',
+                                              padding: '0.5rem 1rem',
+                                              background: 'none',
+                                              border: 'none',
+                                              color: isSuspended ? 'var(--success)' : 'var(--accent-gold)',
+                                              fontSize: '0.825rem',
+                                              textAlign: 'left',
+                                              cursor: 'pointer',
+                                              width: '100%',
+                                              fontFamily: 'var(--font-sans)',
+                                              transition: 'background 0.15s ease'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                            onClick={() => {
+                                              setActiveUserMenuId(null);
+                                              handleToggleSuspendUser(user);
+                                            }}
+                                          >
+                                            {isSuspended ? (
+                                              <>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                                  <line x1="16" y1="2" x2="16" y2="6" />
+                                                  <line x1="8" y1="2" x2="8" y2="6" />
+                                                  <line x1="3" y1="10" x2="21" y2="10" />
+                                                  <line x1="8" y1="14" x2="16" y2="14" />
+                                                </svg>
+                                                Revoke Suspend
+                                              </>
+                                            ) : (
+                                              <>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                                  <line x1="16" y1="2" x2="16" y2="6" />
+                                                  <line x1="8" y1="2" x2="8" y2="6" />
+                                                  <line x1="3" y1="10" x2="21" y2="10" />
+                                                  <line x1="12" y1="14" x2="12" y2="18" />
+                                                  <line x1="10" y1="16" x2="14" y2="16" />
+                                                </svg>
+                                                Suspend User
+                                              </>
+                                            )}
+                                          </button>
+
+                                          {/* Reset Password */}
+                                          <button
+                                            type="button"
+                                            className="dropdown-item"
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '0.625rem',
+                                              padding: '0.5rem 1rem',
+                                              background: 'none',
+                                              border: 'none',
+                                              color: 'var(--text-primary)',
+                                              fontSize: '0.825rem',
+                                              textAlign: 'left',
+                                              cursor: 'pointer',
+                                              width: '100%',
+                                              fontFamily: 'var(--font-sans)',
+                                              transition: 'background 0.15s ease'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                            onClick={() => {
+                                              setActiveUserMenuId(null);
+                                              handleResetPassword(user.uid, user.username);
+                                            }}
+                                          >
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-secondary)' }}>
+                                              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+                                            </svg>
+                                            Reset Password
+                                          </button>
+
+                                          {/* Delete Account */}
+                                          <div style={{ borderTop: '1px solid var(--border-color)', margin: '0.25rem 0' }} />
+                                          <button
+                                            type="button"
+                                            className="dropdown-item"
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '0.625rem',
+                                              padding: '0.5rem 1rem',
+                                              background: 'none',
+                                              border: 'none',
+                                              color: 'var(--danger)',
+                                              fontSize: '0.825rem',
+                                              textAlign: 'left',
+                                              cursor: 'pointer',
+                                              width: '100%',
+                                              fontFamily: 'var(--font-sans)',
+                                              transition: 'background 0.15s ease'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                            onClick={() => {
+                                              setActiveUserMenuId(null);
+                                              handleDeleteUser(user.uid, user.email);
+                                            }}
+                                          >
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                              <polyline points="3 6 5 6 21 6" />
+                                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                              <line x1="10" y1="11" x2="10" y2="17" />
+                                              <line x1="14" y1="11" x2="14" y2="17" />
+                                            </svg>
+                                            Delete Account
+                                          </button>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                       <Pagination currentPage={currentUsersPage} totalPages={totalUsersPages} onPageChange={setUsersPage} />

@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS public.submissions (
 
 -- Ensure onboarding column exists (for backward compatibility updates)
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS onboarding BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS ban_reason TEXT DEFAULT NULL;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS suspended_until timestamp with time zone DEFAULT NULL;
 
 -- 2. Enable Row Level Security (RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
