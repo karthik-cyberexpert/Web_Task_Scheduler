@@ -20,10 +20,13 @@ const mapUser = (u: any) => ({
   username: u.username,
   name: u.name,
   role: u.role,
-  xp: u.xp,
+  exp: u.exp ?? 0,
+  xp: u.xp ?? 0,
   isBanned: u.is_banned ?? false,
   banReason: u.ban_reason ?? "",
   suspendedUntil: u.suspended_until || null,
+  dailyStreak: u.daily_streak ?? 0,
+  lastClaimedAt: u.last_claimed_at ? new Date(u.last_claimed_at) : null,
   createdAt: { toDate: () => new Date(u.created_at) }
 });
 
@@ -33,6 +36,7 @@ const mapTask = (t: any) => ({
   description: t.description,
   deadline: { toDate: () => new Date(t.deadline) },
   maxXP: t.max_xp,
+  xpReward: t.xp_reward ?? 0,
   assignedType: t.assigned_type,
   assignedUsers: t.assigned_users || [],
   createdById: t.created_by_id,
@@ -53,7 +57,36 @@ const mapSubmission = (s: any) => ({
   status: s.status,
   submittedAt: { toDate: () => new Date(s.submitted_at) },
   xpAwarded: s.xp_awarded,
+  levelXPAwarded: s.level_xp_awarded ?? 0,
   reviewedAt: s.reviewed_at ? { toDate: () => new Date(s.reviewed_at) } : null
+});
+
+const mapJob = (j: any) => ({
+  id: j.id,
+  title: j.title,
+  description: j.description,
+  deadline: { toDate: () => new Date(j.deadline) },
+  xpReward: j.xp_reward,
+  assignedType: j.assigned_type,
+  assignedUsers: j.assigned_users || [],
+  createdById: j.created_by_id,
+  createdAt: { toDate: () => new Date(j.created_at) },
+  status: j.status,
+  requiredFields: j.required_fields || ["textarea"]
+});
+
+const mapJobSubmission = (js: any) => ({
+  id: js.id,
+  jobId: js.job_id,
+  jobTitle: js.job_title,
+  userId: js.user_id,
+  userName: js.user_name,
+  userEmail: js.user_email,
+  content: js.content,
+  status: js.status,
+  submittedAt: { toDate: () => new Date(js.submitted_at) },
+  xpAwarded: js.xp_awarded,
+  reviewedAt: js.reviewed_at ? { toDate: () => new Date(js.reviewed_at) } : null
 });
 
 export const getAvatarGradient = (username: string) => {
@@ -336,15 +369,212 @@ const Pagination: React.FC<{
   );
 };
 
+const checkStreak = (dailyStreak: number, lastClaimedAt: Date | null) => {
+  if (!lastClaimedAt) {
+    return {
+      canClaim: true,
+      nextDay: 1,
+      isReset: false,
+      xpReward: 5
+    };
+  }
+
+  const now = new Date();
+  
+  const getLocalDateString = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const date = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${date}`;
+  };
+
+  const todayStr = getLocalDateString(now);
+  const claimedStr = getLocalDateString(lastClaimedAt);
+
+  if (todayStr === claimedStr) {
+    return {
+      canClaim: false,
+      nextDay: (dailyStreak % 7) + 1,
+      isReset: false,
+      xpReward: 5 * Math.pow(2, dailyStreak % 7)
+    };
+  }
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = getLocalDateString(yesterday);
+
+  if (claimedStr === yesterdayStr) {
+    const nextDay = (dailyStreak % 7) + 1;
+    return {
+      canClaim: true,
+      nextDay,
+      isReset: false,
+      xpReward: 5 * Math.pow(2, nextDay - 1)
+    };
+  }
+
+  return {
+    canClaim: true,
+    nextDay: 1,
+    isReset: true,
+    xpReward: 5
+  };
+};
+
+const getXPForDay = (d: number) => {
+  return 5 * Math.pow(2, d - 1);
+};
+
 export const UserDashboard: React.FC<UserDashboardProps> = ({
   onShowToast,
   currentUser,
   userProfile,
   onNavigateToAdmin,
 }) => {
-  // Navigation tabs: overview, tasks, history, leaderboard, evaluate
-  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "history" | "leaderboard" | "evaluate">("overview");
+  // Navigation tabs: overview, tasks, leaderboard, evaluate, jobs
+  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "leaderboard" | "evaluate" | "jobs">("overview");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Daily Rewards state
+  const [isDailyRewardOpen, setIsDailyRewardOpen] = useState(false);
+  const [claimedXpRevealed, setClaimedXpRevealed] = useState<number | null>(null);
+  const [isClaimingDaily, setIsClaimingDaily] = useState(false);
+
+  // Profile modal state
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  // Levels state (fetched for profile progress)
+  const [allLevels, setAllLevels] = useState<any[]>([]);
+
+  // Level-up animation state
+  const [levelUpAnim, setLevelUpAnim] = useState<{ fromLevel: string; toLevel: string } | null>(null);
+
+  const fetchLevels = async () => {
+    const { data, error } = await supabase
+      .from("levels")
+      .select("*")
+      .order("min_xp", { ascending: true });
+    if (!error && data) setAllLevels(data);
+  };
+
+  // Helper: Get current level info from XP
+  const getCurrentLevelInfo = (xp: number, levels: any[]) => {
+    if (!levels || levels.length === 0) return null;
+    let currentLevel = levels[0];
+    for (const lvl of levels) {
+      if (xp >= lvl.min_xp) currentLevel = lvl;
+    }
+    const idx = levels.indexOf(currentLevel);
+    const nextLevel = idx < levels.length - 1 ? levels[idx + 1] : null;
+    const prevMin = currentLevel.min_xp;
+    const progressMax = nextLevel ? nextLevel.min_xp - prevMin : currentLevel.max_xp - prevMin;
+    const progressCurrent = Math.max(0, xp - prevMin);
+    const pct = Math.min(100, Math.round((progressCurrent / Math.max(progressMax, 1)) * 100));
+    return { currentLevel, nextLevel, progressCurrent, progressMax, pct };
+  };
+
+  // Level-up check: run after XP changes
+  const checkAndTriggerLevelUp = async (prevXp: number, newXp: number, levels: any[]) => {
+    if (!levels || levels.length === 0) return;
+    const prevInfo = getCurrentLevelInfo(prevXp, levels);
+    const newInfo = getCurrentLevelInfo(newXp, levels);
+    if (
+      prevInfo && newInfo &&
+      prevInfo.currentLevel.id !== newInfo.currentLevel.id
+    ) {
+      setLevelUpAnim({
+        fromLevel: prevInfo.currentLevel.level_name,
+        toLevel: newInfo.currentLevel.level_name,
+      });
+      // Update level in users table
+      await supabase
+        .from("users")
+        .update({ current_level_id: newInfo.currentLevel.id })
+        .eq("uid", currentUser.uid);
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => setLevelUpAnim(null), 5000);
+    }
+  };
+
+  // Dynamic calculations for streak
+  const currentStreak = userProfile?.daily_streak ?? userProfile?.dailyStreak ?? 0;
+  const lastClaimedVal = userProfile?.last_claimed_at ?? userProfile?.lastClaimedAt ?? null;
+  const lastClaimedDate = lastClaimedVal ? new Date(lastClaimedVal) : null;
+  const streakStatus = checkStreak(currentStreak, lastClaimedDate);
+
+  const handleClaimDailyReward = async () => {
+    if (!streakStatus.canClaim) {
+      onShowToast("You have already claimed today's reward. Come back tomorrow!", "error");
+      return;
+    }
+
+    setIsClaimingDaily(true);
+    try {
+      const nowStr = new Date().toISOString();
+      const nextDay = streakStatus.nextDay;
+      const xpEarned = getXPForDay(nextDay);
+
+      // Fetch user's current XP first to be accurate
+      const { data: userData, error: fetchErr } = await supabase
+        .from("users")
+        .select("xp")
+        .eq("uid", currentUser.uid)
+        .maybeSingle();
+
+      if (fetchErr) throw fetchErr;
+
+      const currentXp = userData?.xp || 0;
+      const newXp = currentXp + xpEarned;
+
+      const { error: updateErr } = await supabase
+        .from("users")
+        .update({
+          xp: newXp,
+          daily_streak: nextDay,
+          last_claimed_at: nowStr
+        })
+        .eq("uid", currentUser.uid);
+
+      if (updateErr) throw updateErr;
+
+      // Check if user leveled up
+      const levelsSnap = allLevels.length > 0 ? allLevels : [];
+      if (levelsSnap.length > 0) {
+        await checkAndTriggerLevelUp(currentXp, newXp, levelsSnap);
+      }
+
+      // Set revealed XP locally for the success animation
+      setClaimedXpRevealed(xpEarned);
+      onShowToast(`Successfully claimed Day ${nextDay} Daily Reward: +${xpEarned} XP!`, "success");
+    } catch (err: any) {
+      console.error("Claim daily reward error:", err);
+      onShowToast(err.message || "Failed to claim daily reward.", "error");
+    } finally {
+      setIsClaimingDaily(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        fetchUsers(),
+        fetchTasks(),
+        fetchSubmissions(),
+        fetchEvaluations(),
+        fetchJobs(),
+        fetchJobSubmissions()
+      ]);
+      onShowToast("Dashboard data refreshed!", "success");
+    } catch (err: any) {
+      console.error("Refresh error:", err);
+      onShowToast("Failed to refresh data.", "error");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   const [evaluateSubmissions, setEvaluateSubmissions] = useState<any[]>([]);
   const [userRatings, setUserRatings] = useState<any[]>([]);
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -367,6 +597,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [subFile, setSubFile] = useState<File | null>(null);
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
 
+  // Jobs states
+  const [allJobs, setAllJobs] = useState<any[]>([]);
+  const [myJobSubmissions, setMyJobSubmissions] = useState<any[]>([]);
+  const [isJobSubmitModalOpen, setIsJobSubmitModalOpen] = useState(false);
+  const [activeSubmitJob, setActiveSubmitJob] = useState<any>(null);
+  const [jobSubText, setJobSubText] = useState("");
+  const [jobSubmissionContent, setJobSubmissionContent] = useState("");
+  const [jobSubLink, setJobSubLink] = useState("");
+  const [jobSubFile, setJobSubFile] = useState<File | null>(null);
+  const [jobSubmitting, setJobSubmitting] = useState(false);
+  const [jobsPage, setJobsPage] = useState(1);
+  const [jobsHistoryPage, setJobsHistoryPage] = useState(1);
+  const [activeJobSubTab, setActiveJobSubTab] = useState<"active" | "pending" | "approved" | "rejected">("active");
+  const [activeTaskSubTab, setActiveTaskSubTab] = useState<"active" | "pending" | "approved" | "rejected">("active");
+
   // Real-time Lists
   const [leaderboardList, setLeaderboardList] = useState<any[]>([]);
   const [allTasks, setAllTasks] = useState<any[]>([]);
@@ -379,7 +624,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     const { data, error } = await supabase
       .from("users")
       .select("*")
-      .order("xp", { ascending: false });
+      .order("exp", { ascending: false });
 
     if (error) {
       console.error("Error fetching leaderboard from Supabase:", error);
@@ -507,11 +752,45 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     }
   };
 
+  const fetchJobs = async () => {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching jobs from Supabase:", error);
+      return;
+    }
+    if (data) {
+      setAllJobs(data.map(mapJob));
+    }
+  };
+
+  const fetchJobSubmissions = async () => {
+    const { data, error } = await supabase
+      .from("job_submissions")
+      .select("*")
+      .eq("user_id", currentUser.uid)
+      .order("submitted_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching job submissions from Supabase:", error);
+      return;
+    }
+    if (data) {
+      setMyJobSubmissions(data.map(mapJobSubmission));
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchTasks();
     fetchSubmissions();
     fetchEvaluations();
+    fetchJobs();
+    fetchJobSubmissions();
+    fetchLevels();
 
     const usersChannel = supabase
       .channel("users-user")
@@ -542,11 +821,26 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       })
       .subscribe();
 
+    const jobsChannel = supabase
+      .channel("jobs-user")
+      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, fetchJobs)
+      .subscribe();
+
+    const jobSubmissionsChannel = supabase
+      .channel("job-submissions-user")
+      .on("postgres_changes", { event: "*", schema: "public", table: "job_submissions" }, () => {
+        fetchJobSubmissions();
+        fetchUsers();
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(usersChannel);
       supabase.removeChannel(tasksChannel);
       supabase.removeChannel(submissionsChannel);
       supabase.removeChannel(ratingsChannel);
+      supabase.removeChannel(jobsChannel);
+      supabase.removeChannel(jobSubmissionsChannel);
     };
   }, [currentUser.uid]);
 
@@ -559,7 +853,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       
       // Filter tasks assigned to current user
       const userTasks = allTasks.filter((task) => {
-        if (task.assignedType === "all") return true;
+        if (task.assignedType === "all") {
+          if (task.assignedUsers && task.assignedUsers.length > 0) {
+            return task.assignedUsers.includes(currentUser.uid);
+          }
+          return true;
+        }
         return task.assignedUsers?.includes(currentUser.uid);
       });
 
@@ -701,21 +1000,26 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       
       let insertErr;
       if (existingSub) {
-        if (existingSub.xpAwarded > 0) {
+        if (existingSub.xpAwarded > 0 || existingSub.levelXPAwarded > 0) {
           const { data: userData, error: fetchErr } = await supabase
             .from("users")
-            .select("xp")
+            .select("exp, xp")
             .eq("uid", currentUser.uid)
             .maybeSingle();
 
           if (fetchErr) throw new Error(fetchErr.message);
 
+          const currentExp = userData?.exp || 0;
           const currentXp = userData?.xp || 0;
-          const newXp = Math.max(0, currentXp - existingSub.xpAwarded);
+          const newExp = Math.max(0, currentExp - existingSub.xpAwarded);
+          const newXp = Math.max(0, currentXp - existingSub.levelXPAwarded);
 
           const { error: userErr } = await supabase
             .from("users")
-            .update({ xp: newXp })
+            .update({ 
+              exp: newExp,
+              xp: newXp
+            })
             .eq("uid", currentUser.uid);
 
           if (userErr) throw new Error(userErr.message);
@@ -725,6 +1029,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           content: contentString,
           status: "pending",
           xp_awarded: 0,
+          level_xp_awarded: 0,
           submitted_at: new Date().toISOString(),
         }).eq("id", existingSub.id);
         insertErr = error;
@@ -764,6 +1069,134 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     }
   };
 
+  const handleJobSubmit = async (e: React.FormEvent, job: any) => {
+    e.preventDefault();
+
+    const reqFields = job.requiredFields || ["textarea"];
+
+    if (reqFields.includes("text") && !jobSubText.trim()) {
+      onShowToast("Please provide the required short answer.", "error");
+      return;
+    }
+    if (reqFields.includes("textarea") && !jobSubmissionContent.trim()) {
+      onShowToast("Please provide the required detailed solution.", "error");
+      return;
+    }
+    if (reqFields.includes("link") && !jobSubLink.trim()) {
+      onShowToast("Please provide the required resource link.", "error");
+      return;
+    }
+    if (reqFields.includes("upload") && !jobSubFile) {
+      onShowToast("Please attach the required file.", "error");
+      return;
+    }
+
+    setJobSubmitting(true);
+    try {
+      let uploadUrl = "";
+      if (reqFields.includes("upload") && jobSubFile) {
+        const fileExt = jobSubFile.name.split('.').pop();
+        const fileName = `job-${currentUser.uid}-${Date.now()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadErr } = await supabase.storage
+          .from("task-attachments")
+          .upload(filePath, jobSubFile);
+
+        if (uploadErr) {
+          throw new Error("File upload failed: " + uploadErr.message);
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("task-attachments")
+          .getPublicUrl(filePath);
+
+        uploadUrl = publicUrlData.publicUrl;
+      }
+
+      const contentObj: Record<string, string> = {};
+      if (reqFields.includes("text")) {
+        contentObj.text = jobSubText.trim();
+      }
+      if (reqFields.includes("textarea")) {
+        contentObj.textarea = jobSubmissionContent.trim();
+      }
+      if (reqFields.includes("link")) {
+        contentObj.link = jobSubLink.trim();
+      }
+      if (reqFields.includes("upload") && uploadUrl) {
+        contentObj.upload = uploadUrl;
+      }
+
+      const contentString = JSON.stringify(contentObj);
+
+      const existingSub = myJobSubmissions.find((sub) => sub.jobId === job.id);
+      
+      let insertErr;
+      if (existingSub) {
+        if (existingSub.xpAwarded > 0) {
+          const { data: userData, error: fetchErr } = await supabase
+            .from("users")
+            .select("xp")
+            .eq("uid", currentUser.uid)
+            .maybeSingle();
+
+          if (fetchErr) throw new Error(fetchErr.message);
+
+          const currentXp = userData?.xp || 0;
+          const newXp = Math.max(0, currentXp - existingSub.xpAwarded);
+
+          const { error: userErr } = await supabase
+            .from("users")
+            .update({ xp: newXp })
+            .eq("uid", currentUser.uid);
+
+          if (userErr) throw new Error(userErr.message);
+        }
+
+        const { error } = await supabase.from("job_submissions").update({
+          content: contentString,
+          status: "pending",
+          xp_awarded: 0,
+          submitted_at: new Date().toISOString(),
+        }).eq("id", existingSub.id);
+        insertErr = error;
+      } else {
+        const { error } = await supabase.from("job_submissions").insert({
+          job_id: job.id,
+          job_title: job.title,
+          user_id: currentUser.uid,
+          user_name: userProfile?.name || "User",
+          user_email: currentUser.email,
+          content: contentString,
+          status: "pending",
+          submitted_at: new Date().toISOString(),
+          xp_awarded: 0,
+        });
+        insertErr = error;
+      }
+
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
+
+      await fetchJobSubmissions();
+
+      onShowToast(`Submission for "${job.title}" uploaded! Waiting for approval.`, "success");
+      setJobSubmissionContent("");
+      setJobSubText("");
+      setJobSubLink("");
+      setJobSubFile(null);
+      setIsJobSubmitModalOpen(false);
+      setActiveSubmitJob(null);
+    } catch (err: any) {
+      console.error(err);
+      onShowToast(err.message || "Failed to submit job.", "error");
+    } finally {
+      setJobSubmitting(false);
+    }
+  };
+
   // Determine the status of a task for the current user:
   // - "completed" if approved submission exists
   // - "pending" if pending submission exists
@@ -779,11 +1212,169 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     return { status: "active", label: "Active", class: "active" };
   };
 
+  const getJobStatusInfo = (jobId: string) => {
+    const jobSubs = myJobSubmissions.filter((sub) => sub.jobId === jobId);
+    if (jobSubs.some((sub) => sub.status === "approved")) {
+      return { status: "completed", label: "Approved", class: "approved" };
+    }
+    if (jobSubs.some((sub) => sub.status === "pending")) {
+      return { status: "pending", label: "Pending Approval", class: "pending" };
+    }
+    if (jobSubs.some((sub) => sub.status === "rejected")) {
+      return { status: "rejected", label: "Rejected", class: "rejected" };
+    }
+    return { status: "active", label: "Active", class: "active" };
+  };
+
+  const assignedJobs = allJobs.filter((job) => {
+    if (job.status !== "active") return false;
+    if (job.assignedType === "all") {
+      if (job.assignedUsers && job.assignedUsers.length > 0) {
+        return job.assignedUsers.includes(currentUser.uid);
+      }
+      return true;
+    }
+    return job.assignedUsers?.includes(currentUser.uid);
+  });
+
   // Filter tasks that the user is assigned to
   const assignedTasks = allTasks.filter((task) => {
-    if (task.assignedType === "all") return true;
+    if (task.assignedType === "all") {
+      if (task.assignedUsers && task.assignedUsers.length > 0) {
+        return task.assignedUsers.includes(currentUser.uid);
+      }
+      return true;
+    }
     return task.assignedUsers?.includes(currentUser.uid);
   });
+
+  // Filter tasks into Active, Pending, Approved, and Rejected/Expired categories
+  const activeTasks = assignedTasks.filter((task) => {
+    const sub = mySubmissions.find((s) => s.taskId === task.id);
+    const isOverdue = new Date(task.deadline.toDate()) < new Date();
+    return !sub && !isOverdue;
+  });
+
+  const pendingTasksHistory = mySubmissions
+    .filter((sub) => sub.status === "pending")
+    .map((sub) => ({
+      id: sub.id,
+      taskTitle: sub.taskTitle,
+      submittedAt: sub.submittedAt,
+      status: sub.status,
+      xpAwarded: sub.xpAwarded,
+      levelXPAwarded: sub.levelXPAwarded,
+      task: allTasks.find((t) => t.id === sub.taskId),
+      submission: sub,
+      isExpired: false,
+    }))
+    .sort((a, b) => b.submittedAt.toDate().getTime() - a.submittedAt.toDate().getTime());
+
+  const approvedTasksHistory = mySubmissions
+    .filter((sub) => sub.status === "approved")
+    .map((sub) => ({
+      id: sub.id,
+      taskTitle: sub.taskTitle,
+      submittedAt: sub.submittedAt,
+      status: sub.status,
+      xpAwarded: sub.xpAwarded,
+      levelXPAwarded: sub.levelXPAwarded,
+      task: allTasks.find((t) => t.id === sub.taskId),
+      submission: sub,
+      isExpired: false,
+    }))
+    .sort((a, b) => b.submittedAt.toDate().getTime() - a.submittedAt.toDate().getTime());
+
+  const rejectedTasksHistory = [
+    ...mySubmissions.filter((sub) => sub.status === "rejected").map((sub) => ({
+      id: sub.id,
+      taskTitle: sub.taskTitle,
+      submittedAt: sub.submittedAt,
+      status: sub.status,
+      xpAwarded: sub.xpAwarded,
+      levelXPAwarded: sub.levelXPAwarded,
+      task: allTasks.find((t) => t.id === sub.taskId),
+      submission: sub,
+      isExpired: false,
+    })),
+    ...assignedTasks.filter((task) => {
+      const sub = mySubmissions.find((s) => s.taskId === task.id);
+      const isOverdue = new Date(task.deadline.toDate()) < new Date();
+      return !sub && isOverdue;
+    }).map((task) => ({
+      id: `expired-${task.id}`,
+      taskTitle: task.title,
+      submittedAt: task.deadline,
+      status: "expired",
+      xpAwarded: 0,
+      levelXPAwarded: 0,
+      task: task,
+      submission: null,
+      isExpired: true,
+    }))
+  ].sort((a, b) => b.submittedAt.toDate().getTime() - a.submittedAt.toDate().getTime());
+
+  // Filter jobs into Active, Pending, Approved, and Rejected/Expired categories
+  const activeJobs = assignedJobs.filter((job) => {
+    const sub = myJobSubmissions.find((s) => s.jobId === job.id);
+    const isOverdue = new Date(job.deadline.toDate()) < new Date();
+    return !sub && !isOverdue;
+  });
+
+  const pendingJobsHistory = myJobSubmissions
+    .filter((sub) => sub.status === "pending")
+    .map((sub) => ({
+      id: sub.id,
+      jobTitle: sub.jobTitle || allJobs.find((j) => j.id === sub.jobId)?.title || "Job Solution",
+      submittedAt: sub.submittedAt,
+      status: sub.status,
+      xpAwarded: sub.xpAwarded,
+      job: allJobs.find((j) => j.id === sub.jobId),
+      submission: sub,
+      isExpired: false,
+    }))
+    .sort((a, b) => b.submittedAt.toDate().getTime() - a.submittedAt.toDate().getTime());
+
+  const approvedJobsHistory = myJobSubmissions
+    .filter((sub) => sub.status === "approved")
+    .map((sub) => ({
+      id: sub.id,
+      jobTitle: sub.jobTitle || allJobs.find((j) => j.id === sub.jobId)?.title || "Job Solution",
+      submittedAt: sub.submittedAt,
+      status: sub.status,
+      xpAwarded: sub.xpAwarded,
+      job: allJobs.find((j) => j.id === sub.jobId),
+      submission: sub,
+      isExpired: false,
+    }))
+    .sort((a, b) => b.submittedAt.toDate().getTime() - a.submittedAt.toDate().getTime());
+
+  const rejectedJobsHistory = [
+    ...myJobSubmissions.filter((sub) => sub.status === "rejected").map((sub) => ({
+      id: sub.id,
+      jobTitle: sub.jobTitle || allJobs.find((j) => j.id === sub.jobId)?.title || "Job Solution",
+      submittedAt: sub.submittedAt,
+      status: sub.status,
+      xpAwarded: sub.xpAwarded,
+      job: allJobs.find((j) => j.id === sub.jobId),
+      submission: sub,
+      isExpired: false,
+    })),
+    ...assignedJobs.filter((job) => {
+      const sub = myJobSubmissions.find((s) => s.jobId === job.id);
+      const isOverdue = new Date(job.deadline.toDate()) < new Date();
+      return !sub && isOverdue;
+    }).map((job) => ({
+      id: `expired-${job.id}`,
+      jobTitle: job.title,
+      submittedAt: job.deadline,
+      status: "expired",
+      xpAwarded: 0,
+      job: job,
+      submission: null,
+      isExpired: true,
+    }))
+  ].sort((a, b) => b.submittedAt.toDate().getTime() - a.submittedAt.toDate().getTime());
 
   const handleLogout = () => {
     authSignOut(auth);
@@ -812,10 +1403,102 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           <div className="brand-badge">User Workspace</div>
         </div>
         <div className="nav-user-info">
+          <button
+            type="button"
+            className="daily-reward-btn"
+            title="Daily Rewards"
+            onClick={() => {
+              setClaimedXpRevealed(null);
+              setIsDailyRewardOpen(true);
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+            </svg>
+            {streakStatus.canClaim && <span className="pulse-dot" />}
+          </button>
+          <button
+            type="button"
+            className="action-icon-btn edit-btn"
+            style={{ 
+              marginRight: '0.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              animation: isRefreshing ? 'spin 1s linear infinite' : 'none'
+            }}
+            title="Refresh Data"
+            disabled={isRefreshing}
+            onClick={handleRefresh}
+            onMouseEnter={(e) => {
+              if (!isRefreshing) {
+                e.currentTarget.style.color = 'var(--text-primary)';
+                e.currentTarget.style.borderColor = 'var(--border-light)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isRefreshing) {
+                e.currentTarget.style.color = 'var(--text-secondary)';
+                e.currentTarget.style.borderColor = 'var(--border-color)';
+              }
+            }}
+          >
+            <style>{`
+              @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 4v6h-6" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+          </button>
           <div className="nav-user-details">
             <div className="nav-user-name">{userProfile?.name || "Loading..."}</div>
             <div className="nav-user-role">{currentUser.email}</div>
           </div>
+          {/* Profile avatar button */}
+          <button
+            type="button"
+            title="View Profile"
+            onClick={() => setIsProfileModalOpen(true)}
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              border: '2px solid var(--primary)',
+              background: getAvatarGradient(userProfile?.username || currentUser.email),
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              color: '#fff',
+              flexShrink: 0,
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+              boxShadow: '0 0 0 0 var(--primary-glow)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.1)';
+              e.currentTarget.style.boxShadow = '0 0 12px var(--primary-glow)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 0 0 0 var(--primary-glow)';
+            }}
+          >
+            {getInitials(userProfile?.name || currentUser.email)}
+          </button>
         </div>
       </header>
 
@@ -858,20 +1541,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <line x1="8" y1="2" x2="8" y2="6" />
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
-              My Assigned Tasks
-            </button>
-            <button
-              className={`sidebar-nav-item ${activeTab === "history" ? "active" : ""}`}
-              onClick={() => {
-                setActiveTab("history");
-                setIsMobileMenuOpen(false);
-              }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 8v4l3 3" />
-                <circle cx="12" cy="12" r="9" />
-              </svg>
-              Submission History
+              Tasks
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "evaluate" ? "active" : ""}`}
@@ -884,6 +1554,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
               Evaluate Submissions
+            </button>
+            <button
+              className={`sidebar-nav-item ${activeTab === "jobs" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("jobs");
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+              Jobs
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "leaderboard" ? "active" : ""}`}
@@ -954,8 +1636,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     </p>
                   </div>
                 </div>
-                <div className="profile-xp-total" style={{ fontSize: "1.1rem" }}>
-                  Total Balance: <span style={{ color: "var(--accent-gold)", fontSize: "1.5rem", fontWeight: 700 }}><CountUp to={userProfile?.xp ?? 0} duration={1.2} suffix=" EXP" /></span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-end' }}>
+                  <div className="profile-xp-total" style={{ fontSize: "0.95rem" }}>
+                    Task Balance: <span style={{ color: "var(--primary-hover)", fontSize: "1.35rem", fontWeight: 700 }}><CountUp to={userProfile?.exp ?? 0} duration={1.2} suffix=" EXP" /></span>
+                  </div>
+                  <div className="profile-xp-total" style={{ fontSize: "0.95rem" }}>
+                    Leveling Points: <span style={{ color: "var(--accent-gold)", fontSize: "1.35rem", fontWeight: 700 }}><CountUp to={userProfile?.xp ?? 0} duration={1.2} suffix=" XP" /></span>
+                  </div>
                 </div>
               </div>
 
@@ -1040,7 +1727,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                               {sub.status}
                             </span>
                             {sub.status === "approved" && (
-                              <span className="xp-gained-value" style={{ fontSize: "0.8rem" }}>+{sub.xpAwarded} EXP</span>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                                <span className="xp-gained-value" style={{ fontSize: "0.8rem" }}>+{sub.xpAwarded} EXP</span>
+                                {sub.levelXPAwarded > 0 && (
+                                  <span className="xp-gained-value" style={{ fontSize: "0.7rem", color: "var(--accent-gold)" }}>+{sub.levelXPAwarded} XP</span>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1055,75 +1747,144 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           {activeTab === "tasks" && (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <div className="dashboard-view-title" style={{ marginBottom: 0 }}>My Assigned Tasks</div>
+                <div className="dashboard-view-title" style={{ marginBottom: 0 }}>Tasks</div>
               </div>
               <p className="dashboard-view-desc">View and submit solutions for tasks assigned to you by the administration.</p>
 
-              {assignedTasks.length === 0 ? (
-                <div className="empty-placeholder">
-                  No tasks assigned to your account at this time.
-                </div>
-              ) : (() => {
-                const ITEMS_PER_PAGE = 10;
-                const totalTasksPages = Math.ceil(assignedTasks.length / ITEMS_PER_PAGE);
-                const currentTasksPage = Math.min(tasksPage, Math.max(1, totalTasksPages));
-                const paginatedTasks = assignedTasks.slice((currentTasksPage - 1) * ITEMS_PER_PAGE, currentTasksPage * ITEMS_PER_PAGE);
-                return (
-                  <div className="user-table-wrapper">
-                    <table className="user-table">
-                      <thead>
-                        <tr>
-                          <th>Title</th>
-                          <th>Deadline</th>
-                          <th>Status</th>
-                          <th>Reward</th>
-                          <th>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedTasks.map((task) => {
-                          const statusInfo = getTaskStatusInfo(task.id);
-                          const isOverdue = new Date(task.deadline.toDate()) < new Date();
-                          return (
-                            <tr key={task.id}>
-                              <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                  <strong>{task.title}</strong>
-                                  {task.description && (
-                                    <button
-                                      type="button"
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ padding: '0.15rem 0.35rem', background: 'transparent', border: 'none', color: 'var(--text-muted)' }}
-                                      title="View Description"
-                                      onClick={() => setViewingDescription(task.description)}
-                                    >
-                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                        <circle cx="12" cy="12" r="3"></circle>
-                                      </svg>
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                              <td>
-                                <span className={`task-deadline ${isOverdue ? "urgent" : "upcoming"}`} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
-                                  {new Date(task.deadline.toDate()).toLocaleString()}
-                                </span>
-                              </td>
-                              <td>
-                                <span className={`status-capsule ${statusInfo.class}`}>
-                                  {statusInfo.label}
-                                </span>
-                              </td>
-                              <td>
-                                {task.assignedType === "all" ? (
-                                  <span style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>{task.maxXP} EXP</span>
-                                ) : (
-                                  <span style={{ color: 'var(--text-muted)' }}>-</span>
-                                )}
-                              </td>
-                              <td>
-                                {statusInfo.status === "active" ? (
+              {/* Subtabs for Tasks */}
+              <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', marginTop: '1rem' }}>
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeTaskSubTab === "active" ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: activeTaskSubTab === "active" ? 'var(--text-primary)' : 'var(--text-muted)',
+                    padding: '0.5rem 0.25rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.85rem'
+                  }}
+                  onClick={() => { setActiveTaskSubTab("active"); setTasksPage(1); }}
+                >
+                  Active Tasks ({activeTasks.length})
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeTaskSubTab === "pending" ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: activeTaskSubTab === "pending" ? 'var(--text-primary)' : 'var(--text-muted)',
+                    padding: '0.5rem 0.25rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.85rem'
+                  }}
+                  onClick={() => { setActiveTaskSubTab("pending"); setHistoryPage(1); }}
+                >
+                  Pending History ({pendingTasksHistory.length})
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeTaskSubTab === "approved" ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: activeTaskSubTab === "approved" ? 'var(--text-primary)' : 'var(--text-muted)',
+                    padding: '0.5rem 0.25rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.85rem'
+                  }}
+                  onClick={() => { setActiveTaskSubTab("approved"); setHistoryPage(1); }}
+                >
+                  Approved History ({approvedTasksHistory.length})
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeTaskSubTab === "rejected" ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: activeTaskSubTab === "rejected" ? 'var(--text-primary)' : 'var(--text-muted)',
+                    padding: '0.5rem 0.25rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.85rem'
+                  }}
+                  onClick={() => { setActiveTaskSubTab("rejected"); setHistoryPage(1); }}
+                >
+                  Rejected History ({rejectedTasksHistory.length})
+                </button>
+              </div>
+
+              {activeTaskSubTab === "active" && (
+                activeTasks.length === 0 ? (
+                  <div className="empty-placeholder">
+                    No active tasks assigned to your account at this time.
+                  </div>
+                ) : (() => {
+                  const ITEMS_PER_PAGE = 10;
+                  const totalTasksPages = Math.ceil(activeTasks.length / ITEMS_PER_PAGE);
+                  const currentTasksPage = Math.min(tasksPage, Math.max(1, totalTasksPages));
+                  const paginatedTasks = activeTasks.slice((currentTasksPage - 1) * ITEMS_PER_PAGE, currentTasksPage * ITEMS_PER_PAGE);
+                  return (
+                    <div className="user-table-wrapper">
+                      <table className="user-table">
+                        <thead>
+                          <tr>
+                            <th>Title</th>
+                            <th>Deadline</th>
+                            <th>Status</th>
+                            <th>Reward</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedTasks.map((task) => {
+                            const statusInfo = getTaskStatusInfo(task.id);
+                            const isOverdue = new Date(task.deadline.toDate()) < new Date();
+                            return (
+                              <tr key={task.id}>
+                                <td>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <strong>{task.title}</strong>
+                                    {task.description && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        style={{ padding: '0.15rem 0.35rem', background: 'transparent', border: 'none', color: 'var(--text-muted)' }}
+                                        title="View Description"
+                                        onClick={() => setViewingDescription(task.description)}
+                                      >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                          <circle cx="12" cy="12" r="3"></circle>
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className={`task-deadline ${isOverdue ? "urgent" : "upcoming"}`} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                    {new Date(task.deadline.toDate()).toLocaleString()}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className={`status-capsule ${statusInfo.class}`}>
+                                    {statusInfo.label}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ color: 'var(--primary-hover)', fontWeight: 600, fontSize: '0.85rem' }}>{task.maxXP} EXP</span>
+                                    {task.xpReward > 0 && (
+                                      <span style={{ color: 'var(--accent-gold)', fontWeight: 600, fontSize: '0.75rem' }}>+{task.xpReward} XP</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td>
                                   <button
                                     className="btn btn-primary btn-sm"
                                     onClick={() => {
@@ -1133,157 +1894,167 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                   >
                                     Submit Solution
                                   </button>
-                                ) : (
-                                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                                    <span style={{ color: "var(--text-muted)", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                        <polyline points="22 4 12 14.01 9 11.01" />
-                                      </svg>
-                                      {statusInfo.status === "pending" ? "Pending" : "Completed"}
-                                    </span>
-                                    {!isOverdue && (
-                                      <button
-                                        className="btn btn-secondary btn-sm"
-                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
-                                        onClick={() => {
-                                          const existingSub = mySubmissions.find((s) => s.taskId === task.id);
-                                          if (existingSub) {
-                                            try {
-                                              const parsed = JSON.parse(existingSub.content);
-                                              setSubText(parsed.text || "");
-                                              setSubmissionContent(parsed.textarea || "");
-                                              setSubLink(parsed.link || "");
-                                            } catch(e) {}
-                                          }
-                                          setActiveSubmitTask(task);
-                                          setIsSubmitModalOpen(true);
-                                        }}
-                                      >
-                                        Edit Solution
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    <Pagination currentPage={currentTasksPage} totalPages={totalTasksPages} onPageChange={setTasksPage} />
-                  </div>
-                );
-              })()}
-            </>
-          )}
-
-          {activeTab === "history" && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <div className="dashboard-view-title" style={{ marginBottom: 0 }}>Submission History</div>
-              </div>
-              <p className="dashboard-view-desc">Monitor the verification status of your task solutions and track earned EXP points.</p>
-
-              {mySubmissions.length === 0 ? (
-                <div className="empty-placeholder">You have not made any submissions yet.</div>
-              ) : (() => {
-                const ITEMS_PER_PAGE = 10;
-                const totalHistoryPages = Math.ceil(mySubmissions.length / ITEMS_PER_PAGE);
-                const currentHistoryPage = Math.min(historyPage, Math.max(1, totalHistoryPages));
-                const paginatedSubmissions = mySubmissions.slice((currentHistoryPage - 1) * ITEMS_PER_PAGE, currentHistoryPage * ITEMS_PER_PAGE);
-                return (
-                  <div className="user-table-wrapper">
-                    <table className="user-table">
-                      <thead>
-                        <tr>
-                          <th>Task Title</th>
-                          <th>Submitted On</th>
-                          <th>Status</th>
-                          <th>Avg Rating</th>
-                          <th>EXP Gained</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedSubmissions.map((sub) => {
-                          const isExpanded = expandedSubmissionId === sub.id;
-                          const subRatings = historyRatings.filter((r: any) => r.submission_id === sub.id);
-                          const totalRating = subRatings.reduce((sum: number, r: any) => sum + r.rating, 0);
-                          const ratingCount = subRatings.length;
-                          const avgRating = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : "—";
-                          return (
-                            <React.Fragment key={sub.id}>
-                              <tr
-                                style={{ cursor: "pointer" }}
-                                onClick={() => setExpandedSubmissionId(isExpanded ? null : sub.id)}
-                              >
-                                <td>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                                    <svg
-                                      width="12"
-                                      height="12"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2.5"
-                                      style={{
-                                        transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
-                                        transition: "transform 0.2s",
-                                        color: "var(--text-muted)"
-                                      }}
-                                    >
-                                      <polyline points="9 18 15 12 9 6" />
-                                    </svg>
-                                    <strong>{sub.taskTitle}</strong>
-                                  </div>
-                                </td>
-                                <td>
-                                  <span style={{ color: "var(--text-muted)" }}>
-                                    {new Date(sub.submittedAt.toDate()).toLocaleString()}
-                                  </span>
-                                </td>
-                                <td>
-                                  <span className={`status-capsule ${sub.status}`}>
-                                    {sub.status}
-                                  </span>
-                                </td>
-                                <td>
-                                  {ratingCount > 0 ? (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-primary)' }}>
-                                      <span style={{ color: 'var(--accent-gold)' }}>★</span>
-                                      <span>{avgRating}</span>
-                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>({ratingCount} {ratingCount === 1 ? 'user' : 'users'})</span>
-                                    </div>
-                                  ) : (
-                                    <span style={{ color: "var(--text-muted)" }}>—</span>
-                                  )}
-                                </td>
-                                <td>
-                                  {sub.status === "approved" ? (
-                                    <span className="xp-gained-value" style={{ fontWeight: 700 }}>+{sub.xpAwarded} EXP</span>
-                                  ) : (
-                                    <span style={{ color: "var(--text-muted)" }}>-</span>
-                                  )}
                                 </td>
                               </tr>
-                              {isExpanded && (
-                                <tr>
-                                  <td colSpan={5} style={{ backgroundColor: "rgba(255, 255, 255, 0.01)", padding: "1.25rem 1.5rem", borderTop: "none" }}>
-                                    <div style={{ paddingLeft: "1.25rem", borderLeft: "2px solid var(--border-color)" }}>
-                                      <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600 }}>Your Submission Details</h4>
-                                      {renderSubmissionContent(sub.content)}
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <Pagination currentPage={currentTasksPage} totalPages={totalTasksPages} onPageChange={setTasksPage} />
+                    </div>
+                  );
+                })()
+              )}
+
+              {activeTaskSubTab !== "active" && (() => {
+                const subtabItems = 
+                  activeTaskSubTab === "pending" ? pendingTasksHistory :
+                  activeTaskSubTab === "approved" ? approvedTasksHistory :
+                  rejectedTasksHistory;
+
+                return subtabItems.length === 0 ? (
+                  <div className="empty-placeholder">
+                    {activeTaskSubTab === "pending" ? "No pending task submissions found." :
+                     activeTaskSubTab === "approved" ? "No approved task submissions found." :
+                     "No rejected or expired tasks found."}
+                  </div>
+                ) : (() => {
+                  const ITEMS_PER_PAGE = 10;
+                  const totalHistoryPages = Math.ceil(subtabItems.length / ITEMS_PER_PAGE);
+                  const currentHistoryPage = Math.min(historyPage, Math.max(1, totalHistoryPages));
+                  const paginatedItems = subtabItems.slice((currentHistoryPage - 1) * ITEMS_PER_PAGE, currentHistoryPage * ITEMS_PER_PAGE);
+                  return (
+                    <div className="user-table-wrapper">
+                      <table className="user-table">
+                        <thead>
+                          <tr>
+                            <th>Task Title</th>
+                            <th>{activeTaskSubTab === "rejected" ? "Submitted/Deadline" : "Submitted On"}</th>
+                            <th>Status</th>
+                            {activeTaskSubTab === "approved" && <th>Avg Rating</th>}
+                            <th>{activeTaskSubTab === "approved" ? "EXP Gained" : "Action"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedItems.map((item) => {
+                            const isExpanded = expandedSubmissionId === item.id;
+                            const isOverdue = item.task ? new Date(item.task.deadline.toDate()) < new Date() : true;
+                            
+                            // Ratings info
+                            const subRatings = item.submission ? historyRatings.filter((r: any) => r.submission_id === item.submission.id) : [];
+                            const totalRating = subRatings.reduce((sum: number, r: any) => sum + r.rating, 0);
+                            const ratingCount = subRatings.length;
+                            const avgRating = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : "—";
+
+                            return (
+                              <React.Fragment key={item.id}>
+                                <tr
+                                  style={{ cursor: item.submission ? "pointer" : "default" }}
+                                  onClick={() => {
+                                    if (item.submission) {
+                                      setExpandedSubmissionId(isExpanded ? null : item.id);
+                                    }
+                                  }}
+                                >
+                                  <td>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                      {item.submission && (
+                                        <svg
+                                          width="12"
+                                          height="12"
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2.5"
+                                          style={{
+                                            transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                                            transition: "transform 0.2s",
+                                            color: "var(--text-muted)"
+                                          }}
+                                        >
+                                          <polyline points="9 18 15 12 9 6" />
+                                        </svg>
+                                      )}
+                                      <strong>{item.taskTitle}</strong>
                                     </div>
                                   </td>
+                                  <td>
+                                    <span style={{ color: "var(--text-muted)" }}>
+                                      {new Date(item.submittedAt.toDate()).toLocaleString()}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <span className={`status-capsule ${item.status}`}>
+                                      {item.status}
+                                    </span>
+                                  </td>
+                                  {activeTaskSubTab === "approved" && (
+                                    <td>
+                                      {ratingCount > 0 ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-primary)' }}>
+                                          <span style={{ color: 'var(--accent-gold)' }}>★</span>
+                                          <span>{avgRating}</span>
+                                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>({ratingCount} {ratingCount === 1 ? 'user' : 'users'})</span>
+                                        </div>
+                                      ) : (
+                                        <span style={{ color: "var(--text-muted)" }}>—</span>
+                                      )}
+                                    </td>
+                                  )}
+                                  <td>
+                                    {activeTaskSubTab === "approved" ? (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span className="xp-gained-value" style={{ fontWeight: 700 }}>+{item.xpAwarded} EXP</span>
+                                        {item.levelXPAwarded > 0 && (
+                                          <span className="xp-gained-value" style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--accent-gold)' }}>+{item.levelXPAwarded} XP</span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      !isOverdue ? (
+                                        <button
+                                          className="btn btn-secondary btn-sm"
+                                          style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (item.submission) {
+                                              try {
+                                                const parsed = JSON.parse(item.submission.content);
+                                                setSubText(parsed.text || "");
+                                                setSubmissionContent(parsed.textarea || "");
+                                                setSubLink(parsed.link || "");
+                                              } catch(err) {}
+                                            }
+                                            setActiveSubmitTask(item.task);
+                                            setIsSubmitModalOpen(true);
+                                          }}
+                                        >
+                                          {item.submission ? "Edit Solution" : "Submit Solution"}
+                                        </button>
+                                      ) : (
+                                        <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Expired</span>
+                                      )
+                                    )}
+                                  </td>
                                 </tr>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    <Pagination currentPage={currentHistoryPage} totalPages={totalHistoryPages} onPageChange={setHistoryPage} />
-                  </div>
-                );
+                                {isExpanded && item.submission && (
+                                  <tr>
+                                    <td colSpan={activeTaskSubTab === "approved" ? 5 : 4} style={{ backgroundColor: "rgba(255, 255, 255, 0.01)", padding: "1.25rem 1.5rem", borderTop: "none" }}>
+                                      <div style={{ paddingLeft: "1.25rem", borderLeft: "2px solid var(--border-color)" }}>
+                                        <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600 }}>Your Submission Details</h4>
+                                        {renderSubmissionContent(item.submission.content)}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <Pagination currentPage={currentHistoryPage} totalPages={totalHistoryPages} onPageChange={setHistoryPage} />
+                    </div>
+                  );
+                })()
               })()}
             </>
           )}
@@ -1321,11 +2092,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 {secondUser.name} {secondUser.uid === currentUser.uid && " (You)"}
                               </div>
                               <div className="podium-user-username">@{secondUser.username}</div>
-                              <div className="podium-xp-text">
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px' }}>
-                                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                </svg>
-                                <span style={{ verticalAlign: 'middle' }}>{secondUser.xp} EXP</span>
+                              <div className="podium-xp-text" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: '12px', marginTop: '4px' }}>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--primary-hover)', fontWeight: 'bold' }}>{secondUser.exp} EXP</span>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--accent-gold)', fontWeight: 600 }}>{secondUser.xp} XP</span>
                               </div>
                             </div>
                           )}
@@ -1348,11 +2117,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 {firstUser.name} {firstUser.uid === currentUser.uid && " (You)"}
                               </div>
                               <div className="podium-user-username">@{firstUser.username}</div>
-                              <div className="podium-xp-text">
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px' }}>
-                                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                </svg>
-                                <span style={{ verticalAlign: 'middle' }}>{firstUser.xp} EXP</span>
+                              <div className="podium-xp-text" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: '12px', marginTop: '4px' }}>
+                                <span style={{ fontSize: '0.95rem', color: 'var(--primary-hover)', fontWeight: 'bold' }}>{firstUser.exp} EXP</span>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 600 }}>{firstUser.xp} XP</span>
                               </div>
                             </div>
                           )}
@@ -1370,11 +2137,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 {thirdUser.name} {thirdUser.uid === currentUser.uid && " (You)"}
                               </div>
                               <div className="podium-user-username">@{thirdUser.username}</div>
-                              <div className="podium-xp-text">
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px' }}>
-                                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                </svg>
-                                <span style={{ verticalAlign: 'middle' }}>{thirdUser.xp} EXP</span>
+                              <div className="podium-xp-text" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: '12px', marginTop: '4px' }}>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--primary-hover)', fontWeight: 'bold' }}>{thirdUser.exp} EXP</span>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--accent-gold)', fontWeight: 600 }}>{thirdUser.xp} XP</span>
                               </div>
                             </div>
                           )}
@@ -1407,7 +2172,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                     <span className="leaderboard-row-username">@{user.username}</span>
                                   </div>
                                 </div>
-                                <div className="leaderboard-row-xp">{user.xp} EXP</div>
+                                <div className="leaderboard-row-xp" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                                  <span style={{ fontSize: '0.875rem', color: 'var(--primary-hover)', fontWeight: 'bold' }}>{user.exp} EXP</span>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 600 }}>{user.xp} XP</span>
+                                </div>
                               </div>
                             );
                           })}
@@ -1549,6 +2317,294 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               })()}
             </>
           )}
+
+          {activeTab === "jobs" && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div className="dashboard-view-title" style={{ marginBottom: 0 }}>Jobs</div>
+              </div>
+              <p className="dashboard-view-desc">Complete jobs assigned to you to earn leveling XP.</p>
+
+              {/* Subtabs for Jobs */}
+              <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', marginTop: '1rem' }}>
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeJobSubTab === "active" ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: activeJobSubTab === "active" ? 'var(--text-primary)' : 'var(--text-muted)',
+                    padding: '0.5rem 0.25rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.85rem'
+                  }}
+                  onClick={() => { setActiveJobSubTab("active"); setJobsPage(1); }}
+                >
+                  Active Jobs ({activeJobs.length})
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeJobSubTab === "pending" ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: activeJobSubTab === "pending" ? 'var(--text-primary)' : 'var(--text-muted)',
+                    padding: '0.5rem 0.25rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.85rem'
+                  }}
+                  onClick={() => { setActiveJobSubTab("pending"); setJobsHistoryPage(1); }}
+                >
+                  Pending History ({pendingJobsHistory.length})
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeJobSubTab === "approved" ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: activeJobSubTab === "approved" ? 'var(--text-primary)' : 'var(--text-muted)',
+                    padding: '0.5rem 0.25rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.85rem'
+                  }}
+                  onClick={() => { setActiveJobSubTab("approved"); setJobsHistoryPage(1); }}
+                >
+                  Approved History ({approvedJobsHistory.length})
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeJobSubTab === "rejected" ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: activeJobSubTab === "rejected" ? 'var(--text-primary)' : 'var(--text-muted)',
+                    padding: '0.5rem 0.25rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.85rem'
+                  }}
+                  onClick={() => { setActiveJobSubTab("rejected"); setJobsHistoryPage(1); }}
+                >
+                  Rejected History ({rejectedJobsHistory.length})
+                </button>
+              </div>
+
+              {activeJobSubTab === "active" ? (
+                activeJobs.length === 0 ? (
+                  <div className="empty-placeholder">
+                    No active jobs assigned to your account at this time.
+                  </div>
+                ) : (() => {
+                  const ITEMS_PER_PAGE = 10;
+                  const totalJobsPages = Math.ceil(activeJobs.length / ITEMS_PER_PAGE);
+                  const currentJobsPage = Math.min(jobsPage, Math.max(1, totalJobsPages));
+                  const paginatedJobs = activeJobs.slice((currentJobsPage - 1) * ITEMS_PER_PAGE, currentJobsPage * ITEMS_PER_PAGE);
+                  return (
+                    <div className="user-table-wrapper">
+                      <table className="user-table">
+                        <thead>
+                          <tr>
+                            <th>Title</th>
+                            <th>Deadline</th>
+                            <th>Status</th>
+                            <th>XP Reward</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedJobs.map((job) => {
+                            const statusInfo = getJobStatusInfo(job.id);
+                            const isOverdue = new Date(job.deadline.toDate()) < new Date();
+                            return (
+                              <tr key={job.id}>
+                                <td>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <strong>{job.title}</strong>
+                                    {job.description && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        style={{ padding: '0.15rem 0.35rem', background: 'transparent', border: 'none', color: 'var(--text-muted)' }}
+                                        title="View Description"
+                                        onClick={() => setViewingDescription(job.description)}
+                                      >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                          <circle cx="12" cy="12" r="3"></circle>
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className={`task-deadline ${isOverdue ? "urgent" : "upcoming"}`} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                    {new Date(job.deadline.toDate()).toLocaleString()}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className={`status-capsule ${statusInfo.class}`}>
+                                    {statusInfo.label}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span style={{ color: 'var(--accent-gold)', fontWeight: 600, fontSize: '0.85rem' }}>{job.xpReward} XP</span>
+                                </td>
+                                <td>
+                                  <button
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => {
+                                      setActiveSubmitJob(job);
+                                      setIsJobSubmitModalOpen(true);
+                                    }}
+                                  >
+                                    Submit Solution
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <Pagination currentPage={currentJobsPage} totalPages={totalJobsPages} onPageChange={setJobsPage} />
+                    </div>
+                  );
+                })()
+              ) : (() => {
+                const subtabItems = 
+                  activeJobSubTab === "pending" ? pendingJobsHistory :
+                  activeJobSubTab === "approved" ? approvedJobsHistory :
+                  rejectedJobsHistory;
+
+                return subtabItems.length === 0 ? (
+                  <div className="empty-placeholder">
+                    {activeJobSubTab === "pending" ? "No pending job submissions found." :
+                     activeJobSubTab === "approved" ? "No approved job submissions found." :
+                     "No rejected or expired jobs found."}
+                  </div>
+                ) : (() => {
+                  const ITEMS_PER_PAGE = 10;
+                  const totalJobsHistoryPages = Math.ceil(subtabItems.length / ITEMS_PER_PAGE);
+                  const currentJobsHistoryPage = Math.min(jobsHistoryPage, Math.max(1, totalJobsHistoryPages));
+                  const paginatedJobSubmissions = subtabItems.slice((currentJobsHistoryPage - 1) * ITEMS_PER_PAGE, currentJobsHistoryPage * ITEMS_PER_PAGE);
+                  return (
+                    <div className="user-table-wrapper">
+                      <table className="user-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: '40px' }}></th>
+                            <th>Job Title</th>
+                            <th>{activeJobSubTab === "rejected" ? "Submitted/Deadline" : "Submitted On"}</th>
+                            <th>Status</th>
+                            <th>{activeJobSubTab === "approved" ? "XP Awarded" : "Action"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedJobSubmissions.map((item) => {
+                            const isExpanded = expandedSubmissionId === item.id;
+                            const isOverdue = item.job ? new Date(item.job.deadline.toDate()) < new Date() : true;
+
+                            return (
+                              <React.Fragment key={item.id}>
+                                <tr
+                                  style={{ cursor: item.submission ? "pointer" : "default" }}
+                                  onClick={() => {
+                                    if (item.submission) {
+                                      setExpandedSubmissionId(isExpanded ? null : item.id);
+                                    }
+                                  }}
+                                >
+                                  <td>
+                                    {item.submission && (
+                                      <svg
+                                        width="12"
+                                        height="12"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2.5"
+                                        style={{
+                                          transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                                          transition: "transform 0.2s",
+                                          color: "var(--text-muted)"
+                                        }}
+                                      >
+                                        <polyline points="9 18 15 12 9 6" />
+                                      </svg>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <strong>{item.jobTitle}</strong>
+                                  </td>
+                                  <td>
+                                    <span style={{ color: "var(--text-muted)" }}>
+                                      {new Date(item.submittedAt.toDate()).toLocaleString()}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <span className={`status-capsule ${item.status}`}>
+                                      {item.status}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    {activeJobSubTab === "approved" ? (
+                                      <span className="xp-gained-value" style={{ fontWeight: 700, color: 'var(--accent-gold)' }}>+{item.xpAwarded} XP</span>
+                                    ) : (
+                                      !isOverdue ? (
+                                        <button
+                                          className="btn btn-secondary btn-sm"
+                                          style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (item.submission) {
+                                              if (window.confirm("Resubmitting will reset your current status and deduct any awarded XP for this job until it is re-evaluated. Do you wish to proceed?")) {
+                                                setActiveSubmitJob(item.job);
+                                                setJobSubText("");
+                                                setJobSubmissionContent("");
+                                                setJobSubLink("");
+                                                setJobSubFile(null);
+                                                setIsJobSubmitModalOpen(true);
+                                              }
+                                            } else {
+                                              setActiveSubmitJob(item.job);
+                                              setIsJobSubmitModalOpen(true);
+                                            }
+                                          }}
+                                        >
+                                          {item.submission ? "Resubmit" : "Submit Solution"}
+                                        </button>
+                                      ) : (
+                                        <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Expired</span>
+                                      )
+                                    )}
+                                  </td>
+                                </tr>
+                                {isExpanded && item.submission && (
+                                  <tr>
+                                    <td colSpan={5} style={{ backgroundColor: "rgba(255, 255, 255, 0.01)", padding: "1.25rem 1.5rem", borderTop: "none" }}>
+                                      <div style={{ paddingLeft: "1.25rem", borderLeft: "2px solid var(--border-color)" }}>
+                                        <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600 }}>Your Submission Details</h4>
+                                        {renderSubmissionContent(item.submission.content)}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <Pagination currentPage={currentJobsHistoryPage} totalPages={totalJobsHistoryPages} onPageChange={setJobsHistoryPage} />
+                    </div>
+                  );
+                })()
+              })()}
+            </>
+          )}
+
         </main>
       </div>
 
@@ -1702,6 +2758,156 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       )}
 
+      {/* Submit Job Solution Modal */}
+      {isJobSubmitModalOpen && activeSubmitJob && (
+        <div className="modal-overlay" onClick={() => {
+          setIsJobSubmitModalOpen(false);
+          setJobSubmissionContent("");
+          setJobSubText("");
+          setJobSubLink("");
+          setJobSubFile(null);
+        }}>
+          <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">Submit Job Solution</div>
+              <button type="button" className="modal-close-btn" onClick={() => {
+                setIsJobSubmitModalOpen(false);
+                setJobSubmissionContent("");
+                setJobSubText("");
+                setJobSubLink("");
+                setJobSubFile(null);
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--bg-base)', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-color)' }}>
+                <strong style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--text-primary)' }}>{activeSubmitJob.title}</strong>
+                <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{activeSubmitJob.description}</p>
+              </div>
+              <form onSubmit={(e) => handleJobSubmit(e, activeSubmitJob)}>
+                {(() => {
+                  const reqFields = activeSubmitJob.requiredFields || ["textarea"];
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                      {reqFields.includes("text") && (
+                        <div className="form-group">
+                          <label className="form-label">Short Answer</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Provide a brief summary or direct answer..."
+                            value={jobSubText}
+                            onChange={(e) => setJobSubText(e.target.value)}
+                            required
+                          />
+                        </div>
+                      )}
+                      
+                      {reqFields.includes("textarea") && (
+                        <div className="form-group">
+                          <label className="form-label">Detailed Solution</label>
+                          <textarea
+                            className="form-control"
+                            placeholder="Enter detailed step-by-step description of your solution..."
+                            rows={4}
+                            value={jobSubmissionContent}
+                            onChange={(e) => setJobSubmissionContent(e.target.value)}
+                            required
+                          ></textarea>
+                        </div>
+                      )}
+                      
+                      {reqFields.includes("link") && (
+                        <div className="form-group">
+                          <label className="form-label">Resource Link (URL)</label>
+                          <input
+                            type="url"
+                            className="form-control"
+                            placeholder="https://example.com/project-link"
+                            value={jobSubLink}
+                            onChange={(e) => setJobSubLink(e.target.value)}
+                            required
+                          />
+                        </div>
+                      )}
+                      
+                      {reqFields.includes("upload") && (
+                        <div className="form-group">
+                          <label className="form-label">Attach File (Max 5MB)</label>
+                          <input
+                            type="file"
+                            className="form-control"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 5 * 1024 * 1024) {
+                                if (file.type.startsWith("image/")) {
+                                  onShowToast("Image exceeds 5MB. Auto-compressing...", "success");
+                                  try {
+                                    const compressed = await compressImage(file);
+                                    if (compressed.size > 5 * 1024 * 1024) {
+                                      onShowToast("Failed to compress image below 5MB.", "error");
+                                      e.target.value = "";
+                                      setJobSubFile(null);
+                                    } else {
+                                      setJobSubFile(compressed);
+                                      onShowToast(`Image compressed successfully (${(compressed.size / (1024 * 1024)).toFixed(2)} MB)`, "success");
+                                    }
+                                  } catch (err) {
+                                    console.error(err);
+                                    onShowToast("Error compressing image.", "error");
+                                    e.target.value = "";
+                                    setJobSubFile(null);
+                                  }
+                                } else {
+                                  onShowToast("File exceeds 5MB size limit.", "error");
+                                  e.target.value = "";
+                                  setJobSubFile(null);
+                                }
+                              } else {
+                                setJobSubFile(file);
+                              }
+                            }}
+                            required={!jobSubFile}
+                          />
+                          {jobSubFile && (
+                            <span style={{ fontSize: "0.75rem", color: "var(--success)", marginTop: "0.25rem", display: "inline-block" }}>
+                              Selected: {jobSubFile.name} ({(jobSubFile.size / (1024 * 1024)).toFixed(2)} MB)
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setIsJobSubmitModalOpen(false);
+                      setJobSubmissionContent("");
+                      setJobSubText("");
+                      setJobSubLink("");
+                      setJobSubFile(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={jobSubmitting}>
+                    {jobSubmitting ? "Submitting..." : "Send for Approval"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {viewingDescription && (
         <div className="modal-overlay" onClick={() => setViewingDescription(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', padding: '1.5rem' }}>
@@ -1715,6 +2921,345 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Daily XP Rewards Modal */}
+      {isDailyRewardOpen && (
+        <div className="modal-overlay" onClick={() => setIsDailyRewardOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '560px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-gold)" strokeWidth="2.5">
+                  <path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+                </svg>
+                Daily XP Rewards
+              </div>
+              <button type="button" className="modal-close-btn" onClick={() => setIsDailyRewardOpen(false)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+                Claim your daily leveling XP rewards! If you miss a day, your streak will reset to Day 1.
+              </p>
+
+              {streakStatus.isReset && (
+                <div className="streak-notice">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  <span>Oh no! You missed yesterday's reward. Your streak has reset to Day 1.</span>
+                </div>
+              )}
+
+              <div className="daily-rewards-grid">
+                {[1, 2, 3, 4, 5, 6, 7].map((dayNum) => {
+                  let cardState: "claimed" | "active" | "locked" = "locked";
+                  
+                  if (streakStatus.canClaim) {
+                    if (streakStatus.isReset) {
+                      cardState = dayNum === 1 ? "active" : "locked";
+                    } else {
+                      if (dayNum < streakStatus.nextDay) {
+                        cardState = "claimed";
+                      } else if (dayNum === streakStatus.nextDay) {
+                        cardState = "active";
+                      } else {
+                        cardState = "locked";
+                      }
+                    }
+                  } else {
+                    if (dayNum <= currentStreak) {
+                      cardState = "claimed";
+                    } else {
+                      cardState = "locked";
+                    }
+                  }
+
+                  return (
+                    <div key={dayNum} className={`reward-card ${cardState}`}>
+                      <div className="day-label">Day {dayNum}</div>
+                      <div className="reward-icon">
+                        {cardState === "claimed" ? (
+                          <span style={{ color: 'var(--success)' }}>✓</span>
+                        ) : cardState === "active" ? (
+                          <span>🎁</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>🔒</span>
+                        )}
+                      </div>
+                      <div className="reward-value">
+                        {cardState === "claimed" ? (
+                          `+${getXPForDay(dayNum)} XP`
+                        ) : (
+                          "? XP"
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {claimedXpRevealed !== null ? (
+                <div className="daily-success-banner">
+                  <h3>Claim Successful!</h3>
+                  <p style={{ color: 'var(--text-primary)', fontWeight: 600, margin: '0.25rem 0' }}>
+                    You earned <span style={{ color: 'var(--accent-gold)' }}>+{claimedXpRevealed} XP</span>!
+                  </p>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Your current streak is now {currentStreak} {currentStreak === 1 ? 'day' : 'days'}. Come back tomorrow to claim more!
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      Current Streak: <strong style={{ color: 'var(--text-primary)' }}>{currentStreak} {currentStreak === 1 ? 'day' : 'days'}</strong>
+                    </div>
+                    {streakStatus.canClaim && (
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        Today's Reward: <strong style={{ color: 'var(--accent-gold)' }}>Mystery XP</strong>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    disabled={!streakStatus.canClaim || isClaimingDaily}
+                    onClick={handleClaimDailyReward}
+                  >
+                    {isClaimingDaily ? "Claiming..." : streakStatus.canClaim ? "Claim Today's Reward" : "Reward Already Claimed Today"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Level-Up Animation Overlay */}
+      {levelUpAnim && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'radial-gradient(ellipse at center, rgba(99,102,241,0.25) 0%, rgba(0,0,0,0.85) 100%)',
+            backdropFilter: 'blur(8px)',
+            animation: 'fadeInScale 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
+          onClick={() => setLevelUpAnim(null)}
+        >
+          <style>{`
+            @keyframes fadeInScale {
+              from { opacity: 0; transform: scale(0.7); }
+              to { opacity: 1; transform: scale(1); }
+            }
+            @keyframes levelUpPulse {
+              0%, 100% { box-shadow: 0 0 40px rgba(99,102,241,0.4), 0 0 80px rgba(20,184,166,0.2); }
+              50% { box-shadow: 0 0 80px rgba(99,102,241,0.7), 0 0 140px rgba(20,184,166,0.4); }
+            }
+            @keyframes confettiBounce {
+              0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+              100% { transform: translateY(-80px) rotate(360deg); opacity: 0; }
+            }
+            @keyframes shimmer {
+              0% { background-position: -200% center; }
+              100% { background-position: 200% center; }
+            }
+          `}</style>
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+              border: '2px solid rgba(99,102,241,0.5)',
+              borderRadius: '24px',
+              padding: '3rem 4rem',
+              textAlign: 'center',
+              maxWidth: '480px',
+              width: '90%',
+              animation: 'levelUpPulse 2s ease-in-out infinite',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Confetti particles */}
+            {[...Array(12)].map((_, i) => (
+              <div key={i} style={{
+                position: 'absolute',
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: ['#6366f1', '#14b8a6', '#f59e0b', '#ec4899', '#10b981'][i % 5],
+                top: `${Math.random() * 80 + 10}%`,
+                left: `${(i / 12) * 100}%`,
+                animation: `confettiBounce ${0.8 + Math.random() * 0.8}s ease-out ${i * 0.1}s infinite alternate`,
+              }} />
+            ))}
+
+            <div style={{ fontSize: '4rem', marginBottom: '0.75rem', filter: 'drop-shadow(0 0 20px gold)' }}>⚡</div>
+            <div style={{
+              fontSize: '1rem',
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              marginBottom: '0.5rem',
+            }}>Level Up!</div>
+            <h2 style={{
+              fontSize: '2.5rem',
+              fontWeight: 900,
+              background: 'linear-gradient(90deg, #6366f1, #14b8a6, #f59e0b, #6366f1)',
+              backgroundSize: '200% auto',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              animation: 'shimmer 2s linear infinite',
+              marginBottom: '1.5rem',
+            }}>
+              {levelUpAnim.toLevel}
+            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>FROM</div>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-secondary)', padding: '0.4rem 0.9rem', background: 'var(--bg-surface-elevated)', borderRadius: '8px' }}>{levelUpAnim.fromLevel}</div>
+              </div>
+              <div style={{ fontSize: '1.5rem', color: 'var(--primary-hover)' }}>→</div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>TO</div>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', padding: '0.4rem 0.9rem', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', borderRadius: '8px' }}>{levelUpAnim.toLevel}</div>
+              </div>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+              🎉 Congratulations! Keep earning XP to unlock the next level!
+            </p>
+            <button
+              className="btn btn-primary"
+              style={{ background: 'linear-gradient(135deg, var(--primary), var(--secondary))', border: 'none', padding: '0.75rem 2rem', fontSize: '1rem', fontWeight: 700, borderRadius: '12px' }}
+              onClick={() => setLevelUpAnim(null)}
+            >
+              Awesome! 🚀
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Modal */}
+      {isProfileModalOpen && (() => {
+        const xp = userProfile?.xp ?? 0;
+        const levelInfo = getCurrentLevelInfo(xp, allLevels);
+        return (
+          <div className="modal-overlay" onClick={() => setIsProfileModalOpen(false)}>
+            <div className="modal-content" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-title">My Profile</div>
+                <button type="button" className="modal-close-btn" onClick={() => setIsProfileModalOpen(false)}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="modal-body" style={{ paddingTop: '0.5rem' }}>
+                {/* Avatar + name */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                  <div style={{
+                    width: '72px', height: '72px', borderRadius: '50%',
+                    background: getAvatarGradient(userProfile?.username || currentUser.email),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1.75rem', fontWeight: 900, color: '#fff',
+                    border: '3px solid var(--primary)',
+                    boxShadow: '0 0 20px var(--primary-glow)',
+                    flexShrink: 0,
+                  }}>
+                    {getInitials(userProfile?.name || currentUser.email)}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>{userProfile?.name || "—"}</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>@{userProfile?.username || "—"}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{currentUser.email}</div>
+                    {levelInfo && (
+                      <div style={{ marginTop: '0.35rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', padding: '0.2rem 0.65rem', borderRadius: '99px' }}>
+                          ⚡ {levelInfo.currentLevel.level_name}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Stats row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                  <div style={{ textAlign: 'center', padding: '0.75rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary-hover)' }}>{userProfile?.exp ?? 0}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>EXP</div>
+                  </div>
+                  <div style={{ textAlign: 'center', padding: '0.75rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-gold)' }}>{xp}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>XP</div>
+                  </div>
+                  <div style={{ textAlign: 'center', padding: '0.75rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--secondary)' }}>#{typeof userRank === 'number' ? userRank : '—'}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>Rank</div>
+                  </div>
+                </div>
+
+                {/* XP Level Progress */}
+                {levelInfo ? (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Level Progress</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {levelInfo.progressCurrent} / {levelInfo.progressMax} XP
+                      </div>
+                    </div>
+                    <div style={{ width: '100%', height: '14px', background: 'var(--bg-surface-elevated)', borderRadius: '99px', overflow: 'hidden', position: 'relative' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${levelInfo.pct}%`,
+                        background: 'linear-gradient(90deg, var(--primary), var(--secondary))',
+                        borderRadius: '99px',
+                        transition: 'width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                        boxShadow: '0 0 10px rgba(99,102,241,0.5)',
+                      }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{levelInfo.currentLevel.level_name}</span>
+                      {levelInfo.nextLevel && (
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {levelInfo.nextLevel.level_name} at {levelInfo.nextLevel.min_xp} XP
+                        </span>
+                      )}
+                    </div>
+                    {!levelInfo.nextLevel && (
+                      <div style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '0.78rem', color: 'var(--accent-gold)', fontWeight: 600 }}>
+                        🏆 You've reached the highest level!
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-sm)', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                    No levels configured yet. Ask your admin to set up the leveling system.
+                  </div>
+                )}
+
+                {/* Streak info */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" /></svg>
+                    Daily Streak
+                  </div>
+                  <div style={{ fontWeight: 700, color: 'var(--accent-gold)', fontSize: '1rem' }}>
+                    {userProfile?.daily_streak ?? userProfile?.dailyStreak ?? 0} days 🔥
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

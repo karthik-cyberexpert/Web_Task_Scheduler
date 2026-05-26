@@ -817,14 +817,33 @@ a:hover {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius-md);
-  overflow: hidden;
+  overflow: visible;
   box-shadow: var(--shadow-sm);
 }
 
 .user-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   text-align: left;
+}
+
+.user-table tr:first-child th:first-child {
+  border-top-left-radius: calc(var(--border-radius-md) - 1px);
+}
+
+.user-table tr:first-child th:last-child {
+  border-top-right-radius: calc(var(--border-radius-md) - 1px);
+}
+
+.user-table tr:last-child td:first-child {
+  border-bottom-left-radius: calc(var(--border-radius-md) - 1px);
+  border-bottom: none;
+}
+
+.user-table tr:last-child td:last-child {
+  border-bottom-right-radius: calc(var(--border-radius-md) - 1px);
+  border-bottom: none;
 }
 
 .user-table th {
@@ -2223,3 +2242,200 @@ a:hover {
   background: rgba(245, 158, 11, 0.1);
   border-color: rgba(245, 158, 11, 0.2);
 }
+
+/* Daily Rewards Header & Modal Styles */
+.daily-reward-btn {
+  position: relative;
+  margin-right: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.daily-reward-btn:hover {
+  color: var(--accent-gold);
+  border-color: rgba(245, 158, 11, 0.4);
+  background-color: rgba(245, 158, 11, 0.05);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.15);
+}
+
+.pulse-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 9px;
+  height: 9px;
+  background-color: var(--accent-gold);
+  border-radius: 50%;
+  border: 1.5px solid var(--bg-base);
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+  animation: pulse-glow 1.5s infinite;
+}
+
+@keyframes pulse-glow {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 5px rgba(245, 158, 11, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+.daily-rewards-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+@media (max-width: 640px) {
+  .daily-rewards-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.reward-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0.5rem;
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.reward-card .day-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.reward-card .reward-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  transition: transform 0.25s ease;
+}
+
+.reward-card .reward-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* Claimed State */
+.reward-card.claimed {
+  background-color: rgba(16, 185, 129, 0.04);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.reward-card.claimed .day-label {
+  color: var(--success);
+}
+
+.reward-card.claimed .reward-value {
+  color: var(--success);
+}
+
+/* Active State */
+.reward-card.active {
+  background-color: rgba(99, 102, 241, 0.05);
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.2), inset 0 0 10px rgba(99, 102, 241, 0.1);
+  animation: card-active-glow 2s infinite alternate;
+}
+
+.reward-card.active .day-label {
+  color: var(--text-primary);
+}
+
+.reward-card.active .reward-icon {
+  animation: bounce-slow 2s infinite;
+}
+
+.reward-card.active .reward-value {
+  color: var(--primary-hover);
+  font-weight: 800;
+}
+
+/* Locked State */
+.reward-card.locked {
+  opacity: 0.65;
+}
+
+.reward-card:hover:not(.locked) {
+  transform: translateY(-3px);
+}
+
+.reward-card.active:hover {
+  border-color: var(--primary-hover);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.3), inset 0 0 12px rgba(99, 102, 241, 0.15);
+}
+
+@keyframes card-active-glow {
+  0% {
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.15), inset 0 0 8px rgba(99, 102, 241, 0.05);
+  }
+  100% {
+    box-shadow: 0 0 18px rgba(99, 102, 241, 0.35), inset 0 0 12px rgba(99, 102, 241, 0.15);
+  }
+}
+
+@keyframes bounce-slow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.daily-success-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%);
+  border: 1px dashed rgba(16, 185, 129, 0.25);
+  border-radius: var(--border-radius-md);
+  text-align: center;
+  margin-top: 1rem;
+  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.daily-success-banner h3 {
+  color: var(--success);
+  margin-bottom: 0.25rem;
+}
+
+.streak-notice {
+  font-size: 0.8rem;
+  color: var(--accent-gold);
+  background-color: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius-sm);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+

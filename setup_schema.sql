@@ -10,11 +10,14 @@ CREATE TABLE IF NOT EXISTS public.users (
   username text not null unique,
   name text not null,
   role text not null default 'user',
+  exp integer not null default 0,
   xp integer not null default 0,
   onboarding boolean not null default false,
   is_banned boolean not null default false,
   ban_reason text default null,
   suspended_until timestamp with time zone default null,
+  daily_streak integer not null default 0,
+  last_claimed_at timestamp with time zone default null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -24,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   description text not null,
   deadline timestamp with time zone not null,
   max_xp integer not null default 500,
+  xp_reward integer not null default 0,
   assigned_type text not null,
   assigned_users text[] not null default '{}',
   created_by_id text not null,
@@ -43,6 +47,7 @@ CREATE TABLE IF NOT EXISTS public.submissions (
   status text not null default 'pending',
   submitted_at timestamp with time zone default timezone('utc'::text, now()) not null,
   xp_awarded integer not null default 0,
+  level_xp_awarded integer not null default 0,
   reviewed_at timestamp with time zone
 );
 
@@ -160,8 +165,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.submissions;
 -- 5. Seed Initial Admin User
 -- ==========================================
 
-INSERT INTO public.users (uid, email, username, name, role, xp, onboarding)
-VALUES ('admin-init-uid', 'itzkarthik.cyber@gmail.com', 'admin', 'Admin Manager', 'admin', 0, true)
+INSERT INTO public.users (uid, email, username, name, role, exp, xp, onboarding)
+VALUES ('admin-init-uid', 'itzkarthik.cyber@gmail.com', 'admin', 'Admin Manager', 'admin', 0, 0, true)
 ON CONFLICT (username) DO UPDATE SET
   email = EXCLUDED.email,
   role = EXCLUDED.role,
@@ -194,3 +199,71 @@ DROP POLICY IF EXISTS "Public Delete Access" ON storage.objects;
 CREATE POLICY "Public Delete Access"
 ON storage.objects FOR DELETE
 USING ( bucket_id = 'task-attachments' );
+
+-- ==========================================
+-- 7. Mini Jobs Schema Configuration
+-- ==========================================
+
+-- Create jobs table
+CREATE TABLE IF NOT EXISTS public.jobs (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text not null,
+  deadline timestamp with time zone not null,
+  xp_reward integer not null default 50,
+  assigned_type text not null,
+  assigned_users text[] not null default '{}',
+  created_by_id text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  status text not null default 'active',
+  required_fields text[] not null default '{"textarea"}'
+);
+
+-- Create job_submissions table
+CREATE TABLE IF NOT EXISTS public.job_submissions (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references public.jobs(id) on delete cascade,
+  job_title text not null,
+  user_id text not null references public.users(uid) on delete cascade,
+  user_name text not null,
+  user_email text not null,
+  content text not null,
+  status text not null default 'pending',
+  submitted_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  xp_awarded integer not null default 0,
+  reviewed_at timestamp with time zone
+);
+
+-- Enable RLS
+ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.job_submissions ENABLE ROW LEVEL SECURITY;
+
+-- Configure RLS Policies for jobs
+DROP POLICY IF EXISTS "Enable read access for all jobs" ON public.jobs;
+CREATE POLICY "Enable read access for all jobs" ON public.jobs FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Enable insert access for all jobs" ON public.jobs;
+CREATE POLICY "Enable insert access for all jobs" ON public.jobs FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Enable update access for all jobs" ON public.jobs;
+CREATE POLICY "Enable update access for all jobs" ON public.jobs FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Enable delete access for all jobs" ON public.jobs;
+CREATE POLICY "Enable delete access for all jobs" ON public.jobs FOR DELETE USING (true);
+
+-- Configure RLS Policies for job_submissions
+DROP POLICY IF EXISTS "Enable read access for all job_submissions" ON public.job_submissions;
+CREATE POLICY "Enable read access for all job_submissions" ON public.job_submissions FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Enable insert access for all job_submissions" ON public.job_submissions;
+CREATE POLICY "Enable insert access for all job_submissions" ON public.job_submissions FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Enable update access for all job_submissions" ON public.job_submissions;
+CREATE POLICY "Enable update access for all job_submissions" ON public.job_submissions FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Enable delete access for all job_submissions" ON public.job_submissions;
+CREATE POLICY "Enable delete access for all job_submissions" ON public.job_submissions FOR DELETE USING (true);
+
+-- Enable Realtime subscriptions
+ALTER PUBLICATION supabase_realtime ADD TABLE public.jobs;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.job_submissions;

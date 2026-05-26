@@ -21,10 +21,13 @@ const mapUser = (u: any) => ({
   username: u.username,
   name: u.name,
   role: u.role,
-  xp: u.xp,
+  exp: u.exp ?? 0,
+  xp: u.xp ?? 0,
   isBanned: u.is_banned ?? false,
   banReason: u.ban_reason ?? "",
   suspendedUntil: u.suspended_until || null,
+  dailyStreak: u.daily_streak ?? 0,
+  lastClaimedAt: u.last_claimed_at ? new Date(u.last_claimed_at) : null,
   createdAt: { toDate: () => new Date(u.created_at) }
 });
 
@@ -34,6 +37,7 @@ const mapTask = (t: any) => ({
   description: t.description,
   deadline: { toDate: () => new Date(t.deadline) },
   maxXP: t.max_xp,
+  xpReward: t.xp_reward ?? 0,
   assignedType: t.assigned_type,
   assignedUsers: t.assigned_users || [],
   createdById: t.created_by_id,
@@ -54,6 +58,7 @@ const mapSubmission = (s: any) => ({
   status: s.status,
   submittedAt: { toDate: () => new Date(s.submitted_at) },
   xpAwarded: s.xp_awarded,
+  levelXPAwarded: s.level_xp_awarded ?? 0,
   reviewedAt: s.reviewed_at ? { toDate: () => new Date(s.reviewed_at) } : null
 });
 
@@ -106,6 +111,34 @@ const renderSubmissionContent = (content: string) => {
   }
   return <div style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem" }}>{content}</div>;
 };
+
+const mapJob = (j: any) => ({
+  id: j.id,
+  title: j.title,
+  description: j.description,
+  deadline: { toDate: () => new Date(j.deadline) },
+  xpReward: j.xp_reward,
+  assignedType: j.assigned_type,
+  assignedUsers: j.assigned_users || [],
+  createdById: j.created_by_id,
+  createdAt: { toDate: () => new Date(j.created_at) },
+  status: j.status,
+  requiredFields: j.required_fields || ["textarea"]
+});
+
+const mapJobSubmission = (js: any) => ({
+  id: js.id,
+  jobId: js.job_id,
+  jobTitle: js.job_title,
+  userId: js.user_id,
+  userName: js.user_name,
+  userEmail: js.user_email,
+  content: js.content,
+  status: js.status,
+  submittedAt: { toDate: () => new Date(js.submitted_at) },
+  xpAwarded: js.xp_awarded,
+  reviewedAt: js.reviewed_at ? { toDate: () => new Date(js.reviewed_at) } : null
+});
 
 const Pagination: React.FC<{
   currentPage: number;
@@ -205,8 +238,37 @@ const Pagination: React.FC<{
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, currentUser, onBackToUser }) => {
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "users" | "leaderboard">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "users" | "leaderboard" | "jobs" | "levels">("overview");
+
+  // Levels state
+  const [levelsList, setLevelsList] = useState<any[]>([]);
+  const [isLevelModalOpen, setIsLevelModalOpen] = useState(false);
+  const [editingLevel, setEditingLevel] = useState<any | null>(null);
+  const [levelName, setLevelName] = useState("");
+  const [levelMinXP, setLevelMinXP] = useState("0");
+  const [levelMaxXP, setLevelMaxXP] = useState("");
+  const [levelCreating, setLevelCreating] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        fetchUsers(),
+        fetchTasks(),
+        fetchSubmissions(),
+        fetchJobs(),
+        fetchJobSubmissions()
+      ]);
+      onShowToast("Dashboard data refreshed!", "success");
+    } catch (err: any) {
+      console.error("Refresh error:", err);
+      onShowToast("Failed to refresh data.", "error");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [taskStep, setTaskStep] = useState(1);
@@ -231,7 +293,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const [userCreating, setUserCreating] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [activeUserMenuId, setActiveUserMenuId] = useState<string | null>(null);
+  const [isSuspendModalOpen, setIsSuspendModalOpen] = useState(false);
+  const [userToSuspend, setUserToSuspend] = useState<any>(null);
+  const [suspendType, setSuspendType] = useState<"day" | "hour">("day");
+  const [suspendDays, setSuspendDays] = useState("0");
+  const [suspendHours, setSuspendHours] = useState("0");
+  const [suspendMinutes, setSuspendMinutes] = useState("0");
   const [newUserRole, setNewUserRole] = useState<"user" | "admin">("user");
+
+  // Jobs states
+  const [jobsList, setJobsList] = useState<any[]>([]);
+  const [allJobSubmissions, setAllJobSubmissions] = useState<any[]>([]);
+  const [jobsPage, setJobsPage] = useState(1);
+  const [isJobModalOpen, setIsJobModalOpen] = useState(false);
+  const [jobStep, setJobStep] = useState(1);
+  const [jobTitle, setJobTitle] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [jobDeadline, setJobDeadline] = useState("");
+  const [jobAssignedType, setJobAssignedType] = useState<"all" | "specific">("all");
+  const [selectedJobUserIds, setSelectedJobUserIds] = useState<string[]>([]);
+  const [jobXPReward, setJobXPReward] = useState("50");
+  const [jobRequiredFields, setJobRequiredFields] = useState<string[]>(["textarea"]);
+  const [jobCreating, setJobCreating] = useState(false);
+  const [editingJob, setEditingJob] = useState<any | null>(null);
+  const [isJobCalendarPopupOpen, setIsJobCalendarPopupOpen] = useState(false);
+  const [selectedJobCalendarDate, setSelectedJobCalendarDate] = useState<Date | null>(null);
+  const [jobCalendarHour, setJobCalendarHour] = useState("00");
+  const [jobCalendarMinute, setJobCalendarMinute] = useState("00");
+  const [selectedJobForSubmissions, setSelectedJobForSubmissions] = useState<any>(null);
+  const [isJobSubmissionsModalOpen, setIsJobSubmissionsModalOpen] = useState(false);
+  const [modalJobSubmissions, setModalJobSubmissions] = useState<any[]>([]);
+  const [modalJobSubmissionsLoading, setModalJobSubmissionsLoading] = useState(false);
+  const [modalJobTab, setModalJobTab] = useState<"pending" | "approved">("pending");
+  const [activeJobMenuId, setActiveJobMenuId] = useState<string | null>(null);
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
@@ -239,6 +333,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const [taskAssignedType, setTaskAssignedType] = useState<"all" | "specific">("all");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [maxXP, setMaxXP] = useState("500");
+  const [taskXPReward, setTaskXPReward] = useState("0");
   const [taskCreating, setTaskCreating] = useState(false);
   const [editingTask, setEditingTask] = useState<any | null>(null);
   const [requiredFields, setRequiredFields] = useState<string[]>(["textarea"]);
@@ -440,11 +535,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     }
   };
 
+  const fetchLevels = async () => {
+    const { data, error } = await supabase
+      .from("levels")
+      .select("*")
+      .order("min_xp", { ascending: true });
+    if (error) {
+      console.error("Error fetching levels:", error);
+      return;
+    }
+    if (data) setLevelsList(data);
+  };
+
+  const fetchJobs = async () => {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching jobs from Supabase:", error);
+      return;
+    }
+    if (data) {
+      setJobsList(data.map(mapJob));
+    }
+  };
+
+  const fetchJobSubmissions = async () => {
+    const { data, error } = await supabase
+      .from("job_submissions")
+      .select("*")
+      .order("submitted_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching job submissions from Supabase:", error);
+      return;
+    }
+    if (data) {
+      setAllJobSubmissions(data.map(mapJobSubmission));
+    }
+  };
+
   // Real-time listeners
   useEffect(() => {
     fetchUsers();
     fetchTasks();
     fetchSubmissions();
+    fetchJobs();
+    fetchJobSubmissions();
+    fetchLevels();
 
     // Subscribe to public database changes in Supabase
     const usersChannel = supabase
@@ -467,10 +607,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       })
       .subscribe();
 
+    const jobsChannel = supabase
+      .channel("jobs-all")
+      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, fetchJobs)
+      .subscribe();
+
+    const jobSubmissionsChannel = supabase
+      .channel("job-submissions-all")
+      .on("postgres_changes", { event: "*", schema: "public", table: "job_submissions" }, () => {
+        fetchJobs();
+        fetchUsers();
+        fetchJobSubmissions();
+      })
+      .subscribe();
+
+    const levelsChannel = supabase
+      .channel("levels-all")
+      .on("postgres_changes", { event: "*", schema: "public", table: "levels" }, fetchLevels)
+      .subscribe();
+
     return () => {
       supabase.removeChannel(usersChannel);
       supabase.removeChannel(tasksChannel);
       supabase.removeChannel(submissionsChannel);
+      supabase.removeChannel(jobsChannel);
+      supabase.removeChannel(jobSubmissionsChannel);
+      supabase.removeChannel(levelsChannel);
     };
   }, []);
 
@@ -669,6 +831,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           username: usernameClean,
           name: newUserName.trim(),
           role: newUserRole,
+          exp: 0,
           xp: 0,
           onboarding: false,
           created_at: new Date().toISOString(),
@@ -842,30 +1005,310 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
         onShowToast(err.message || "Failed to revoke suspension.", "error");
       }
     } else {
-      const hoursStr = window.prompt(`Enter suspension duration in hours for @${user.username}:`, "24");
-      if (hoursStr === null) return; // Cancelled
-      const hours = Number(hoursStr);
-      if (isNaN(hours) || hours <= 0) {
-        onShowToast("Please enter a valid positive number for hours.", "error");
-        return;
-      }
-
-      const suspendedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
-
-      try {
-        const { error } = await supabase
-          .from("users")
-          .update({ suspended_until: suspendedUntil })
-          .eq("uid", user.uid);
-
-        if (error) throw error;
-        onShowToast(`User @${user.username} has been suspended for ${hours} hours.`, "success");
-        fetchUsers();
-      } catch (err: any) {
-        console.error("Error suspending user:", err);
-        onShowToast(err.message || "Failed to suspend user.", "error");
-      }
+      setUserToSuspend(user);
+      setSuspendType("day");
+      setSuspendDays("0");
+      setSuspendHours("0");
+      setSuspendMinutes("0");
+      setIsSuspendModalOpen(true);
     }
+  };
+
+  const handleConfirmSuspend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userToSuspend) return;
+
+    const days = Number(suspendDays);
+    const hours = Number(suspendHours);
+    const minutes = Number(suspendMinutes);
+
+    if (isNaN(days) || isNaN(hours) || isNaN(minutes) || days < 0 || hours < 0 || minutes < 0) {
+      onShowToast("Please enter valid positive numbers for duration.", "error");
+      return;
+    }
+
+    if (suspendType === "hour" && hours >= 24) {
+      onShowToast("Hour wise suspension must be less than 24 hours.", "error");
+      return;
+    }
+
+    const totalMinutes = (suspendType === "day" ? days * 24 * 60 : 0) + (hours * 60) + minutes;
+
+    if (totalMinutes <= 0) {
+      onShowToast("Suspension duration must be greater than zero.", "error");
+      return;
+    }
+
+    const suspendedUntil = new Date(Date.now() + totalMinutes * 60 * 1000).toISOString();
+
+    try {
+      const { error } = await supabase
+        .from("users")
+        .update({ suspended_until: suspendedUntil })
+        .eq("uid", userToSuspend.uid);
+
+      if (error) throw error;
+      onShowToast(`User @${userToSuspend.username} has been suspended.`, "success");
+      setIsSuspendModalOpen(false);
+      setUserToSuspend(null);
+      fetchUsers();
+    } catch (err: any) {
+      console.error("Error suspending user:", err);
+      onShowToast(err.message || "Failed to suspend user.", "error");
+    }
+  };
+
+  // Job Handlers
+  const handleCreateJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const totalSteps = jobAssignedType === "all" ? 4 : 5;
+    if (jobStep < totalSteps) {
+      return;
+    }
+    if (!jobTitle.trim() || !jobDescription.trim() || !jobDeadline) {
+      onShowToast("Job title, description, and deadline are required.", "error");
+      return;
+    }
+
+    if (jobAssignedType === "specific" && selectedJobUserIds.length === 0) {
+      onShowToast("Please select at least one user to assign the job.", "error");
+      return;
+    }
+
+    const xpVal = Number(jobXPReward);
+    if (isNaN(xpVal) || xpVal < 0) {
+      onShowToast("Please enter a valid positive XP reward.", "error");
+      return;
+    }
+
+    if (jobRequiredFields.length === 0) {
+      onShowToast("Please select at least one required submission field.", "error");
+      return;
+    }
+
+    setJobCreating(true);
+    try {
+      let assignedUserIds: string[] = [];
+      if (jobAssignedType === "all") {
+        const { data: activeUsers, error: usersErr } = await supabase
+          .from("users")
+          .select("uid, is_banned, suspended_until")
+          .neq("role", "admin");
+
+        if (usersErr) throw usersErr;
+
+        if (activeUsers) {
+          const now = new Date();
+          assignedUserIds = activeUsers
+            .filter((u) => {
+              const isBanned = u.is_banned === true;
+              const isSuspended = u.suspended_until && new Date(u.suspended_until) > now;
+              return !isBanned && !isSuspended;
+            })
+            .map((u) => u.uid);
+        }
+      } else {
+        assignedUserIds = selectedJobUserIds;
+      }
+
+      if (editingJob) {
+        const { error: updateErr } = await supabase
+          .from("jobs")
+          .update({
+            title: jobTitle.trim(),
+            description: jobDescription.trim(),
+            deadline: new Date(jobDeadline).toISOString(),
+            xp_reward: xpVal,
+            assigned_type: jobAssignedType,
+            assigned_users: assignedUserIds,
+            required_fields: jobRequiredFields,
+          })
+          .eq("id", editingJob.id);
+
+        if (updateErr) throw updateErr;
+        onShowToast("Job updated successfully!", "success");
+      } else {
+        const { error: insertErr } = await supabase.from("jobs").insert({
+          title: jobTitle.trim(),
+          description: jobDescription.trim(),
+          deadline: new Date(jobDeadline).toISOString(),
+          xp_reward: xpVal,
+          assigned_type: jobAssignedType,
+          assigned_users: assignedUserIds,
+          required_fields: jobRequiredFields,
+          created_by_id: currentUser.uid,
+          created_at: new Date().toISOString(),
+          status: "active",
+        });
+
+        if (insertErr) throw insertErr;
+        onShowToast("Job created successfully!", "success");
+      }
+
+      closeJobModal();
+      fetchJobs();
+    } catch (err: any) {
+      console.error(err);
+      onShowToast(err.message || "Failed to save job.", "error");
+    } finally {
+      setJobCreating(false);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    if (!window.confirm("Are you sure you want to delete this job?")) return;
+    try {
+      const { error } = await supabase
+        .from("jobs")
+        .delete()
+        .eq("id", jobId);
+
+      if (error) throw error;
+      onShowToast("Job deleted successfully!", "success");
+      fetchJobs();
+    } catch (err: any) {
+      console.error("Error deleting job:", err);
+      onShowToast(err.message || "Failed to delete job.", "error");
+    }
+  };
+
+  const handleEditJobClick = (job: any) => {
+    setEditingJob(job);
+    setJobTitle(job.title);
+    setJobDescription(job.description);
+
+    const deadlineDate = new Date(job.deadline.toDate());
+    setSelectedJobCalendarDate(deadlineDate);
+    setJobCalendarHour(String(deadlineDate.getHours()).padStart(2, '0'));
+    setJobCalendarMinute(String(deadlineDate.getMinutes()).padStart(2, '0'));
+
+    const year = deadlineDate.getFullYear();
+    const month = String(deadlineDate.getMonth() + 1).padStart(2, "0");
+    const day = String(deadlineDate.getDate()).padStart(2, "0");
+    const hoursStr = String(deadlineDate.getHours()).padStart(2, "0");
+    const minutesStr = String(deadlineDate.getMinutes()).padStart(2, "0");
+    setJobDeadline(`${year}-${month}-${day}T${hoursStr}:${minutesStr}`);
+
+    setJobAssignedType(job.assignedType);
+    setSelectedJobUserIds(job.assignedUsers || []);
+    setJobXPReward(String(job.xpReward));
+    setJobRequiredFields(job.requiredFields || ["textarea"]);
+    setJobStep(1);
+    setIsJobModalOpen(true);
+    setIsJobCalendarPopupOpen(false);
+  };
+
+  const fetchModalJobSubmissions = async () => {
+    if (!selectedJobForSubmissions) return;
+    setModalJobSubmissionsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("job_submissions")
+        .select("*")
+        .eq("job_id", selectedJobForSubmissions.id)
+        .order("submitted_at", { ascending: false });
+
+      if (error) throw error;
+      setModalJobSubmissions((data || []).map(mapJobSubmission));
+    } catch (err) {
+      console.error("Error fetching job submissions:", err);
+    } finally {
+      setModalJobSubmissionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isJobSubmissionsModalOpen && selectedJobForSubmissions) {
+      fetchModalJobSubmissions();
+    }
+  }, [isJobSubmissionsModalOpen, selectedJobForSubmissions]);
+
+  const handleJobSubmissionAction = async (sub: any, action: "approve" | "reject") => {
+    try {
+      if (action === "approve") {
+        const jobData = jobsList.find((j) => j.id === sub.jobId);
+        if (!jobData) {
+          onShowToast("Referenced job not found.", "error");
+          return;
+        }
+
+        const xpAwarded = jobData.xpReward || 0;
+
+        // 1. Update job submission
+        const { error: subErr } = await supabase
+          .from("job_submissions")
+          .update({
+            status: "approved",
+            xp_awarded: xpAwarded,
+            reviewed_at: new Date().toISOString()
+          })
+          .eq("id", sub.id);
+
+        if (subErr) throw subErr;
+
+        // 2. Update user's aggregate XP
+        if (xpAwarded > 0) {
+          const { data: userData, error: fetchErr } = await supabase
+            .from("users")
+            .select("xp")
+            .eq("uid", sub.userId)
+            .maybeSingle();
+
+          if (fetchErr) throw fetchErr;
+
+          const currentXp = userData?.xp || 0;
+          const { error: userErr } = await supabase
+            .from("users")
+            .update({ xp: currentXp + xpAwarded })
+            .eq("uid", sub.userId);
+
+          if (userErr) throw userErr;
+        }
+
+        onShowToast(`Job approved! Awarded ${xpAwarded} XP to ${sub.userName}.`, "success");
+      } else {
+        const { error: subErr } = await supabase
+          .from("job_submissions")
+          .update({
+            status: "rejected",
+            xp_awarded: 0,
+            reviewed_at: new Date().toISOString()
+          })
+          .eq("id", sub.id);
+
+        if (subErr) throw subErr;
+        onShowToast("Job submission rejected.", "success");
+      }
+      fetchModalJobSubmissions();
+      fetchUsers();
+    } catch (err: any) {
+      console.error(err);
+      onShowToast(err.message || "Failed to process job submission.", "error");
+    }
+  };
+
+  const updateJobDeadlineFromCalendar = (date: Date | null, hr: string, min: string) => {
+    if (!date) return;
+    const finalDate = new Date(date);
+    let hourNum = parseInt(hr, 10);
+    if (isNaN(hourNum) || hourNum < 0) hourNum = 0;
+    if (hourNum > 23) hourNum = 23;
+    let minNum = parseInt(min, 10);
+    if (isNaN(minNum) || minNum < 0) minNum = 0;
+    if (minNum > 59) minNum = 59;
+    
+    finalDate.setHours(hourNum);
+    finalDate.setMinutes(minNum);
+    finalDate.setSeconds(0);
+    finalDate.setMilliseconds(0);
+    
+    const year = finalDate.getFullYear();
+    const month = String(finalDate.getMonth() + 1).padStart(2, "0");
+    const day = String(finalDate.getDate()).padStart(2, "0");
+    const hoursStr = String(finalDate.getHours()).padStart(2, "0");
+    const minutesStr = String(finalDate.getMinutes()).padStart(2, "0");
+    
+    setJobDeadline(`${year}-${month}-${day}T${hoursStr}:${minutesStr}`);
   };
 
   // Create Task Handler
@@ -898,6 +1341,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
     setTaskCreating(true);
     try {
+      let assignedUserIds: string[] = [];
+      if (taskAssignedType === "all") {
+        const { data: activeUsers, error: usersErr } = await supabase
+          .from("users")
+          .select("uid, is_banned, suspended_until")
+          .neq("role", "admin");
+
+        if (usersErr) throw usersErr;
+
+        if (activeUsers) {
+          const now = new Date();
+          assignedUserIds = activeUsers
+            .filter((u) => {
+              const isBanned = u.is_banned === true;
+              const isSuspended = u.suspended_until && new Date(u.suspended_until) > now;
+              return !isBanned && !isSuspended;
+            })
+            .map((u) => u.uid);
+        }
+      } else {
+        assignedUserIds = selectedUserIds;
+      }
+
       if (editingTask) {
         const { error: updateErr } = await supabase
           .from("tasks")
@@ -906,8 +1372,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             description: taskDescription.trim(),
             deadline: new Date(taskDeadline).toISOString(),
             max_xp: xpVal,
+            xp_reward: Number(taskXPReward) || 0,
             assigned_type: taskAssignedType,
-            assigned_users: taskAssignedType === "all" ? [] : selectedUserIds,
+            assigned_users: assignedUserIds,
             required_fields: requiredFields,
           })
           .eq("id", editingTask.id);
@@ -923,8 +1390,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           description: taskDescription.trim(),
           deadline: new Date(taskDeadline).toISOString(),
           max_xp: xpVal,
+          xp_reward: Number(taskXPReward) || 0,
           assigned_type: taskAssignedType,
-          assigned_users: taskAssignedType === "all" ? [] : selectedUserIds,
+          assigned_users: assignedUserIds,
           required_fields: requiredFields,
           created_by_id: currentUser.uid,
           created_at: new Date().toISOString(),
@@ -943,19 +1411,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           const deadlineStr = new Date(taskDeadline).toLocaleString();
           let usersToNotify: { email: string; name: string }[] = [];
 
-          if (taskAssignedType === "all") {
+          if (assignedUserIds.length > 0) {
             const { data: usersData } = await supabase
               .from("users")
               .select("email, name")
-              .neq("role", "admin");
-            if (usersData) {
-              usersToNotify = usersData;
-            }
-          } else {
-            const { data: usersData } = await supabase
-              .from("users")
-              .select("email, name")
-              .in("uid", selectedUserIds);
+              .in("uid", assignedUserIds);
             if (usersData) {
               usersToNotify = usersData;
             }
@@ -986,6 +1446,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       setTaskAssignedType("all");
       setSelectedUserIds([]);
       setMaxXP("500");
+      setTaskXPReward("0");
       setRequiredFields(["textarea"]);
       setUserSearchQuery("");
       setEditingTask(null);
@@ -1037,6 +1498,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     setTaskAssignedType(task.assignedType);
     setSelectedUserIds(task.assignedUsers || []);
     setMaxXP(String(task.maxXP));
+    setTaskXPReward(String(task.xpReward || 0));
     setRequiredFields(task.requiredFields || ["textarea"]);
     setUserSearchQuery("");
     setTaskStep(1);
@@ -1080,38 +1542,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           xpAwarded = Math.round(taskData.maxXP * (1 - discountFactor));
         }
 
+        const levelXpAwarded = taskData.xpReward || 0;
+
         // 2. Update submission in Supabase
         const { error: subErr } = await supabase
           .from("submissions")
           .update({
             status: "approved",
             xp_awarded: xpAwarded,
+            level_xp_awarded: levelXpAwarded,
             reviewed_at: new Date().toISOString()
           })
           .eq("id", submission.id);
 
         if (subErr) throw new Error(subErr.message);
 
-        // 3. Update user's aggregate XP in Supabase
-        if (xpAwarded > 0) {
+        // 3. Update user's aggregate EXP and XP in Supabase
+        if (xpAwarded > 0 || levelXpAwarded > 0) {
           const { data: userData, error: fetchErr } = await supabase
             .from("users")
-            .select("xp")
+            .select("exp, xp")
             .eq("uid", submission.userId)
             .maybeSingle();
 
           if (fetchErr) throw new Error(fetchErr.message);
 
+          const currentExp = userData?.exp || 0;
           const currentXp = userData?.xp || 0;
           const { error: userErr } = await supabase
             .from("users")
-            .update({ xp: currentXp + xpAwarded })
+            .update({ 
+              exp: currentExp + xpAwarded,
+              xp: currentXp + levelXpAwarded
+            })
             .eq("uid", submission.userId);
 
           if (userErr) throw new Error(userErr.message);
         }
 
-        onShowToast(`Submission approved! Awarded ${xpAwarded} EXP to ${submission.userName}.`, "success");
+        let toastMessage = `Submission approved! Awarded ${xpAwarded} EXP`;
+        if (levelXpAwarded > 0) {
+          toastMessage += ` and ${levelXpAwarded} XP`;
+        }
+        toastMessage += ` to ${submission.userName}.`;
+        onShowToast(toastMessage, "success");
       } else {
         // Reject submission in Supabase
         const { error: subErr } = await supabase
@@ -1183,6 +1657,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     setTaskAssignedType("all");
     setSelectedUserIds([]);
     setMaxXP("500");
+    setTaskXPReward("0");
     setRequiredFields(["textarea"]);
     setUserSearchQuery("");
     setEditingTask(null);
@@ -1199,11 +1674,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     setEditingTask(null);
   };
 
+  const openNewJobModal = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    setSelectedJobCalendarDate(null);
+    setJobCalendarHour("00");
+    setJobCalendarMinute("00");
+    setJobDeadline("");
+    setJobTitle("");
+    setJobDescription("");
+    setJobAssignedType("all");
+    setSelectedJobUserIds([]);
+    setJobXPReward("50");
+    setJobRequiredFields(["textarea"]);
+    setEditingJob(null);
+    setJobStep(1);
+    setIsJobModalOpen(true);
+    setIsJobCalendarPopupOpen(false);
+  };
+
+  const closeJobModal = () => {
+    setIsJobModalOpen(false);
+    setJobStep(1);
+    setIsJobCalendarPopupOpen(false);
+    setEditingJob(null);
+  };
+
 
 
 
   // Sort usersList to construct Leaderboard on Overview
-  const leaderboardList = [...usersList].sort((a, b) => b.xp - a.xp);
+  const leaderboardList = [...usersList].sort((a, b) => b.exp - a.exp);
 
   return (
     <div className="app-wrapper">
@@ -1228,6 +1730,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           <div className="brand-badge">Admin Panel</div>
         </div>
         <div className="nav-user-info">
+          <button
+            type="button"
+            className="action-icon-btn edit-btn"
+            style={{ 
+              marginRight: '0.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              animation: isRefreshing ? 'spin 1s linear infinite' : 'none'
+            }}
+            title="Refresh Data"
+            disabled={isRefreshing}
+            onClick={handleRefresh}
+            onMouseEnter={(e) => {
+              if (!isRefreshing) {
+                e.currentTarget.style.color = 'var(--text-primary)';
+                e.currentTarget.style.borderColor = 'var(--border-light)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isRefreshing) {
+                e.currentTarget.style.color = 'var(--text-secondary)';
+                e.currentTarget.style.borderColor = 'var(--border-color)';
+              }
+            }}
+          >
+            <style>{`
+              @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 4v6h-6" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+          </button>
           <div className="nav-user-details">
             <div className="nav-user-name">Administrator</div>
             <div className="nav-user-role">{currentUser.email}</div>
@@ -1290,6 +1837,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
               User Accounts
+            </button>
+            <button
+              className={`sidebar-nav-item ${activeTab === "jobs" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("jobs");
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+              Jobs
+            </button>
+            <button
+              className={`sidebar-nav-item ${activeTab === "levels" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("levels");
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+              Levels
             </button>
             <button
               className={`sidebar-nav-item ${activeTab === "leaderboard" ? "active" : ""}`}
@@ -1638,12 +2209,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                         <th>Email</th>
                         <th>Role</th>
                         <th>EXP Balance</th>
+                        <th>XP Balance</th>
                         <th style={{ textAlign: 'center' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td colSpan={6} style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem" }}>
+                        <td colSpan={7} style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem" }}>
                           No registered users found. Click "New User" to add one.
                         </td>
                       </tr>
@@ -1664,6 +2236,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                             <th>Email</th>
                             <th>Role</th>
                             <th>EXP Balance</th>
+                            <th>XP Balance</th>
                             <th style={{ textAlign: 'center' }}>Actions</th>
                           </tr>
                         </thead>
@@ -1692,9 +2265,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                                     {user.role}
                                   </span>
                                 </td>
-                                <td style={{ color: "var(--primary-hover)", fontWeight: "700" }}>{user.xp} EXP</td>
+                                <td style={{ color: "var(--primary-hover)", fontWeight: "700" }}>{user.exp} EXP</td>
+                                <td style={{ color: "var(--accent-gold)", fontWeight: "700" }}>{user.xp} XP</td>
                                 <td>
-                                  <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
+                                  <div style={{ 
+                                    display: 'flex', 
+                                    justifyContent: 'center', 
+                                    position: 'relative',
+                                    zIndex: activeUserMenuId === user.uid ? 100 : 1
+                                  }}>
                                     <button
                                       type="button"
                                       className="action-icon-btn edit-btn"
@@ -1955,7 +2534,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                 {usersList.length === 0 ? (
                   <div className="empty-placeholder">No user rankings yet.</div>
                 ) : (
-                  usersList.sort((a, b) => b.xp - a.xp).map((user, idx) => {
+                  usersList.sort((a, b) => b.exp - a.exp).map((user, idx) => {
                     const rank = idx + 1;
                     return (
                       <div
@@ -1987,8 +2566,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                             </span>
                           </div>
                         </div>
-                        <div className="leaderboard-xp-badge" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-gold)', padding: '0.5rem 1rem', background: 'rgba(251,191,36,0.1)', borderRadius: 'var(--border-radius-full)' }}>
-                          {user.xp} EXP
+                        <div className="leaderboard-xp-badge" style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary-hover)', padding: '0.5rem 1rem', background: 'rgba(99,102,241,0.1)', borderRadius: 'var(--border-radius-full)', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                          <span>{user.exp} EXP</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)' }}>{user.xp} XP</span>
                         </div>
                       </div>
                     );
@@ -1998,9 +2578,419 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             </>
           )}
 
+          {activeTab === "jobs" && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div className="dashboard-view-title" style={{ marginBottom: 0 }}>Jobs</div>
+                <button className="btn btn-primary" onClick={openNewJobModal}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '0.5rem' }}>
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Launch New Job
+                </button>
+              </div>
+              <p className="dashboard-view-desc">Monitor job assignments, details, and completions.</p>
+
+              {jobsList.length === 0 ? (
+                <div className="empty-placeholder">No jobs created yet. Click "Launch New Job" to create one.</div>
+              ) : (() => {
+                const ITEMS_PER_PAGE = 10;
+                const totalJobsPages = Math.ceil(jobsList.length / ITEMS_PER_PAGE);
+                const currentJobsPage = Math.min(jobsPage, Math.max(1, totalJobsPages));
+                const paginatedJobs = jobsList.slice((currentJobsPage - 1) * ITEMS_PER_PAGE, currentJobsPage * ITEMS_PER_PAGE);
+                return (
+                  <div className="user-table-wrapper">
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>Deadline</th>
+                          <th>XP Reward</th>
+                          <th>Assignment</th>
+                          <th>Status</th>
+                          <th>Submissions</th>
+                          <th style={{ textAlign: 'center' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedJobs.map((job) => {
+                          const isOverdue = new Date(job.deadline.toDate()) < new Date();
+                          const jobSubs = allJobSubmissions.filter((sub) => sub.jobId === job.id);
+                          const jobPendingCount = jobSubs.filter((sub) => sub.status === "pending").length;
+                          const jobTotalCount = jobSubs.length;
+                          return (
+                            <tr key={job.id}>
+                              <td>
+                                <strong>{job.title}</strong>
+                              </td>
+                              <td>
+                                <span className={`task-deadline ${isOverdue ? "urgent" : "upcoming"}`} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontWeight: 500, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                  {(() => {
+                                    const dateObj = new Date(job.deadline.toDate());
+                                    const day = String(dateObj.getDate()).padStart(2, '0');
+                                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                    const year = dateObj.getFullYear();
+                                    return `${day}/${month}/${year}`;
+                                  })()}
+                                </span>
+                              </td>
+                              <td>
+                                <span style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>{job.xpReward} XP</span>
+                              </td>
+                              <td>
+                                {job.assignedType === "all" ? "Open to All" : `${job.assignedUsers?.length || 0} User(s)`}
+                              </td>
+                              <td>
+                                <span className={`status-capsule ${job.status === 'active' ? 'active' : 'pending'}`}>
+                                  {job.status}
+                                </span>
+                              </td>
+                              <td>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  disabled={jobTotalCount === 0}
+                                  onClick={() => {
+                                    setSelectedJobForSubmissions(job);
+                                    setIsJobSubmissionsModalOpen(true);
+                                  }}
+                                >
+                                  View ({jobPendingCount} Pnd / {jobTotalCount} Tot)
+                                </button>
+                              </td>
+                              <td>
+                                <div style={{ 
+                                  display: 'flex', 
+                                  justifyContent: 'center', 
+                                  position: 'relative',
+                                  zIndex: activeJobMenuId === job.id ? 100 : 1
+                                }}>
+                                  <button
+                                    type="button"
+                                    className="action-icon-btn edit-btn"
+                                    title="Actions"
+                                    onClick={() => setActiveJobMenuId(activeJobMenuId === job.id ? null : job.id)}
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <circle cx="12" cy="12" r="1.5" />
+                                      <circle cx="12" cy="5" r="1.5" />
+                                      <circle cx="12" cy="19" r="1.5" />
+                                    </svg>
+                                  </button>
+                                  
+                                  {activeJobMenuId === job.id && (
+                                    <>
+                                      <div 
+                                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} 
+                                        onClick={() => setActiveJobMenuId(null)}
+                                      />
+                                      <div style={{
+                                        position: 'absolute',
+                                        right: 0,
+                                        top: '100%',
+                                        backgroundColor: 'var(--bg-surface-elevated)',
+                                        border: '1px solid var(--border-light)',
+                                        borderRadius: 'var(--border-radius-sm)',
+                                        boxShadow: 'var(--shadow-lg)',
+                                        zIndex: 999,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        minWidth: '170px',
+                                        padding: '0.35rem 0',
+                                        marginTop: '0.35rem'
+                                      }}>
+                                        <button
+                                          type="button"
+                                          className="dropdown-item"
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.625rem',
+                                            padding: '0.5rem 1rem',
+                                            background: 'none',
+                                            border: 'none',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.825rem',
+                                            textAlign: 'left',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            fontFamily: 'var(--font-sans)',
+                                            transition: 'background 0.15s ease'
+                                          }}
+                                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'}
+                                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                          onClick={() => {
+                                            setActiveJobMenuId(null);
+                                            handleEditJobClick(job);
+                                          }}
+                                        >
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-secondary)' }}>
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                            <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                          </svg>
+                                          Edit Job
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="dropdown-item"
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.625rem',
+                                            padding: '0.5rem 1rem',
+                                            background: 'none',
+                                            border: 'none',
+                                            color: 'var(--danger)',
+                                            fontSize: '0.825rem',
+                                            textAlign: 'left',
+                                            cursor: 'pointer',
+                                            width: '100%',
+                                            fontFamily: 'var(--font-sans)',
+                                            transition: 'background 0.15s ease'
+                                          }}
+                                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'}
+                                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                          onClick={() => {
+                                            setActiveJobMenuId(null);
+                                            handleDeleteJob(job.id);
+                                          }}
+                                        >
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                            <line x1="10" y1="11" x2="10" y2="17" />
+                                            <line x1="14" y1="11" x2="14" y2="17" />
+                                          </svg>
+                                          Delete Job
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <Pagination currentPage={currentJobsPage} totalPages={totalJobsPages} onPageChange={setJobsPage} />
+                  </div>
+                );
+              })()}
+            </>
+          )}
+
+          {activeTab === "levels" && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div className="dashboard-view-title" style={{ marginBottom: 0 }}>Level Management</div>
+                <button className="btn btn-primary" onClick={() => {
+                  setEditingLevel(null);
+                  setLevelName("");
+                  setLevelMinXP("0");
+                  setLevelMaxXP("");
+                  setIsLevelModalOpen(true);
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '0.5rem' }}>
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Add Level
+                </button>
+              </div>
+              <p className="dashboard-view-desc">Define game levels and their required XP thresholds for user progression.</p>
+
+              {levelsList.length === 0 ? (
+                <div className="empty-placeholder">No levels defined yet. Click "Add Level" to create your first level.</div>
+              ) : (
+                <div className="user-table-wrapper" style={{ marginTop: '1.25rem' }}>
+                  <table className="user-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Level Name</th>
+                        <th>Min XP</th>
+                        <th>Max XP</th>
+                        <th style={{ textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {levelsList.map((lvl, idx) => (
+                        <tr key={lvl.id}>
+                          <td><strong style={{ color: 'var(--primary-hover)' }}>{idx + 1}</strong></td>
+                          <td>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '1rem' }}>⚡</span>
+                              <strong>{lvl.level_name}</strong>
+                            </span>
+                          </td>
+                          <td><span style={{ color: 'var(--secondary)', fontWeight: 600 }}>{lvl.min_xp} XP</span></td>
+                          <td><span style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>{lvl.max_xp} XP</span></td>
+                          <td>
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                              <button
+                                type="button"
+                                className="action-icon-btn edit-btn"
+                                title="Edit Level"
+                                onClick={() => {
+                                  setEditingLevel(lvl);
+                                  setLevelName(lvl.level_name);
+                                  setLevelMinXP(String(lvl.min_xp));
+                                  setLevelMaxXP(String(lvl.max_xp));
+                                  setIsLevelModalOpen(true);
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                              </button>
+                              <button
+                                type="button"
+                                className="action-icon-btn"
+                                title="Delete Level"
+                                style={{ color: 'var(--danger)' }}
+                                onClick={async () => {
+                                  if (!window.confirm(`Delete level "${lvl.level_name}"?`)) return;
+                                  const { error } = await supabase.from("levels").delete().eq("id", lvl.id);
+                                  if (error) {
+                                    onShowToast("Failed to delete level.", "error");
+                                  } else {
+                                    onShowToast("Level deleted.", "success");
+                                    fetchLevels();
+                                  }
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Level visual progression preview */}
+              {levelsList.length > 0 && (
+                <div style={{ marginTop: '2rem', padding: '1.25rem', background: 'var(--bg-surface)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '1rem' }}>Level Progression Preview</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {levelsList.map((lvl, idx) => {
+                      const prevMaxXP = idx === 0 ? 0 : levelsList[idx - 1].max_xp;
+                      const range = lvl.max_xp - prevMaxXP;
+                      const maxRange = levelsList[levelsList.length - 1].max_xp;
+                      const pct = Math.min((range / maxRange) * 100, 100);
+                      return (
+                        <div key={lvl.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div style={{ width: '80px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'right', flexShrink: 0 }}>{lvl.level_name}</div>
+                          <div style={{ flex: 1, height: '10px', background: 'var(--bg-surface-elevated)', borderRadius: '99px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg, var(--primary), var(--secondary))`, borderRadius: '99px', transition: 'width 0.5s ease' }} />
+                          </div>
+                          <div style={{ width: '70px', fontSize: '0.7rem', color: 'var(--accent-gold)', flexShrink: 0 }}>≤{lvl.max_xp} XP</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
 
         </main>
       </div>
+
+      {/* Level Create/Edit Modal */}
+      {isLevelModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsLevelModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">{editingLevel ? "Edit Level" : "Add New Level"}</div>
+              <button type="button" className="modal-close-btn" onClick={() => setIsLevelModalOpen(false)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!levelName.trim() || !levelMaxXP) {
+                  onShowToast("Level name and Max XP are required.", "error");
+                  return;
+                }
+                setLevelCreating(true);
+                try {
+                  const payload = {
+                    level_name: levelName.trim(),
+                    min_xp: parseInt(levelMinXP, 10) || 0,
+                    max_xp: parseInt(levelMaxXP, 10),
+                  };
+                  if (editingLevel) {
+                    const { error } = await supabase.from("levels").update(payload).eq("id", editingLevel.id);
+                    if (error) throw error;
+                    onShowToast("Level updated successfully!", "success");
+                  } else {
+                    const { error } = await supabase.from("levels").insert(payload);
+                    if (error) throw error;
+                    onShowToast("Level created successfully!", "success");
+                  }
+                  fetchLevels();
+                  setIsLevelModalOpen(false);
+                } catch (err: any) {
+                  onShowToast(err.message || "Failed to save level.", "error");
+                } finally {
+                  setLevelCreating(false);
+                }
+              }}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="level-name">Level Name</label>
+                  <input
+                    id="level-name"
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Level 1, Rookie, etc."
+                    value={levelName}
+                    onChange={(e) => setLevelName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="level-min-xp">Min XP (start of level)</label>
+                    <input
+                      id="level-min-xp"
+                      type="number"
+                      className="form-control"
+                      placeholder="e.g. 0"
+                      value={levelMinXP}
+                      onChange={(e) => setLevelMinXP(e.target.value)}
+                      min={0}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="level-max-xp">Max XP (level up at)</label>
+                    <input
+                      id="level-max-xp"
+                      type="number"
+                      className="form-control"
+                      placeholder="e.g. 100"
+                      value={levelMaxXP}
+                      onChange={(e) => setLevelMaxXP(e.target.value)}
+                      min={1}
+                      required
+                    />
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4', display: 'block', marginTop: '-0.5rem' }}>
+                  Users who reach Max XP will automatically level up to the next level.
+                </span>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setIsLevelModalOpen(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={levelCreating}>
+                    {levelCreating ? "Saving..." : editingLevel ? "Save Changes" : "Create Level"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Task Creation Modal */}
       {isTaskModalOpen && (
@@ -2206,7 +3196,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>@{user.username}</div>
                                     </td>
                                     <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem' }}>{user.email}</td>
-                                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--primary-hover)' }}>{user.xp} EXP</td>
+                                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--primary-hover)' }}>{user.exp} EXP</td>
                                   </tr>
                                 ))
                               )}
@@ -2241,6 +3231,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                         ) : (
                           "Notice: Only the selected users can view and attempt this task. They will receive the reward pool specified above upon task completion approval."
                         )}
+                      </span>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="task-xp-reward">Optional Leveling XP Reward</label>
+                      <input
+                        id="task-xp-reward"
+                        type="number"
+                        className="form-control"
+                        placeholder="e.g. 50"
+                        value={taskXPReward}
+                        onChange={(e) => setTaskXPReward(e.target.value)}
+                      />
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem", display: "inline-block", lineHeight: '1.4' }}>
+                        Leveling points awarded directly to the user's permanent XP balance upon task approval.
                       </span>
                     </div>
                   </div>
@@ -2377,6 +3382,749 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             </div>
           </div>
         </div>
+      )}
+
+      {/* Job Creation Modal */}
+      {isJobModalOpen && (
+        <div className="modal-overlay" onClick={closeJobModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '620px' }}>
+            <div className="modal-header">
+              <div className="modal-title">{editingJob ? "Edit Job" : "Launch New Job"}</div>
+              <button type="button" className="modal-close-btn" onClick={closeJobModal}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Stepper Header */}
+            {(() => {
+              const totalSteps = jobAssignedType === "all" ? 4 : 5;
+              const rewardStep = jobAssignedType === "all" ? 3 : 4;
+              const formatStep = jobAssignedType === "all" ? 4 : 5;
+              return (
+                <div className="stepper-container" style={{ marginTop: '1.5rem' }}>
+                  <div className="stepper-line-bg"></div>
+                  <div className="stepper-line-active" style={{ width: `${((jobStep - 1) / (totalSteps - 1)) * 100}%` }}></div>
+                  
+                  <div className={`stepper-step ${jobStep === 1 ? "active" : ""} ${jobStep > 1 ? "completed" : ""}`}>
+                    <div className="stepper-circle">1</div>
+                    <div className="stepper-label">Details</div>
+                  </div>
+                  <div className={`stepper-step ${jobStep === 2 ? "active" : ""} ${jobStep > 2 ? "completed" : ""}`}>
+                    <div className="stepper-circle">2</div>
+                    <div className="stepper-label">Settings</div>
+                  </div>
+                  {jobAssignedType === "specific" && (
+                    <div className={`stepper-step ${jobStep === 3 ? "active" : ""} ${jobStep > 3 ? "completed" : ""}`}>
+                      <div className="stepper-circle">3</div>
+                      <div className="stepper-label">Users</div>
+                    </div>
+                  )}
+                  <div className={`stepper-step ${jobStep === rewardStep ? "active" : ""} ${jobStep > rewardStep ? "completed" : ""}`}>
+                    <div className="stepper-circle">{rewardStep}</div>
+                    <div className="stepper-label">Rewards</div>
+                  </div>
+                  <div className={`stepper-step ${jobStep === formatStep ? "active" : ""}`}>
+                    <div className="stepper-circle">{formatStep}</div>
+                    <div className="stepper-label">Format</div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="modal-body" style={{ paddingTop: '0.5rem' }}>
+              <form onSubmit={handleCreateJob}>
+                
+                {/* Step 1 Content: Job Details */}
+                {jobStep === 1 && (
+                  <div className="stepper-content-body" style={{ minHeight: '260px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="job-title">Job Title</label>
+                      <input
+                        id="job-title"
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Complete manual verification of backups"
+                        value={jobTitle}
+                        onChange={(e) => setJobTitle(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="job-desc">Description & Instructions</label>
+                      <textarea
+                        id="job-desc"
+                        className="form-control"
+                        placeholder="Describe the job details, instructions, and required information here..."
+                        rows={6}
+                        value={jobDescription}
+                        onChange={(e) => setJobDescription(e.target.value)}
+                        required
+                        style={{ resize: 'none' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 2 Content: Target & Deadline (Calendar UI) */}
+                {jobStep === 2 && (
+                  <div className="stepper-content-body" style={{ minHeight: '260px', display: 'flex', flexDirection: 'column', gap: '1.25rem', position: 'relative' }}>
+                    <div className="form-group" style={{ marginBottom: '1.5rem', position: 'relative' }}>
+                      <label className="form-label">Deadline Date & Time</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="text"
+                          className="form-control"
+                          style={{ paddingRight: '40px', cursor: 'pointer' }}
+                          readOnly
+                          value={
+                            selectedJobCalendarDate
+                              ? `${selectedJobCalendarDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${jobCalendarHour.padStart(2, '0')}:${jobCalendarMinute.padStart(2, '0')}`
+                              : ""
+                          }
+                          placeholder="Select deadline date & time..."
+                          onClick={() => setIsJobCalendarPopupOpen(!isJobCalendarPopupOpen)}
+                          required
+                        />
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                          <line x1="16" y1="2" x2="16" y2="6"></line>
+                          <line x1="8" y1="2" x2="8" y2="6"></line>
+                          <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Assignment Mode</label>
+                      <div className="toggle-btn-group" style={{ marginBottom: 0 }}>
+                        <button
+                          type="button"
+                          className={`toggle-option ${jobAssignedType === "all" ? "active" : ""}`}
+                          onClick={() => {
+                            setJobAssignedType("all");
+                            setSelectedJobUserIds([]);
+                          }}
+                        >
+                          All Users
+                        </button>
+                        <button
+                          type="button"
+                          className={`toggle-option ${jobAssignedType === "specific" ? "active" : ""}`}
+                          onClick={() => setJobAssignedType("specific")}
+                        >
+                          Specific Users
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Assignment Table (Specific users only) */}
+                {jobStep === 3 && jobAssignedType === "specific" && (
+                  <div className="stepper-content-body" style={{ minHeight: '260px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Select Assigned Users</label>
+                      
+                      {/* Search Input */}
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Search users by name, username or email..."
+                          value={userSearchQuery}
+                          onChange={(e) => setUserSearchQuery(e.target.value)}
+                          style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                        />
+                      </div>
+
+                      {usersList.length === 0 ? (
+                        <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", padding: "0.5rem" }}>
+                          No users available. Create a user account first in User Accounts tab.
+                        </p>
+                      ) : (
+                        <div className="user-table-wrapper" style={{ maxHeight: "200px", overflowY: 'auto' }}>
+                          <table className="user-table" style={{ width: '100%', fontSize: '0.8rem' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width: '40px', padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-base)' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={filteredUsers.length > 0 && filteredUsers.every(user => selectedJobUserIds.includes(user.uid))}
+                                    onChange={() => {
+                                      const filteredIds = filteredUsers.map(u => u.uid);
+                                      const allSel = filteredUsers.length > 0 && filteredUsers.every(user => selectedJobUserIds.includes(user.uid));
+                                      if (allSel) {
+                                        setSelectedJobUserIds(prev => prev.filter(id => !filteredIds.includes(id)));
+                                      } else {
+                                        setSelectedJobUserIds(prev => {
+                                          const newSelection = [...prev];
+                                          filteredIds.forEach(id => {
+                                            if (!newSelection.includes(id)) {
+                                              newSelection.push(id);
+                                            }
+                                          });
+                                          return newSelection;
+                                        });
+                                      }
+                                    }}
+                                    style={{ width: '14px', height: '14px', cursor: 'pointer' }}
+                                  />
+                                </th>
+                                <th style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-base)' }}>Username</th>
+                                <th style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-base)' }}>Email</th>
+                                <th style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-base)' }}>XP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredUsers.length === 0 ? (
+                                <tr>
+                                  <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1rem' }}>
+                                    No users match search query.
+                                  </td>
+                                </tr>
+                              ) : (
+                                filteredUsers.map((user) => (
+                                  <tr key={user.uid}>
+                                    <td style={{ padding: '0.5rem 0.75rem' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedJobUserIds.includes(user.uid)}
+                                        onChange={() => {
+                                          setSelectedJobUserIds(prev =>
+                                            prev.includes(user.uid) ? prev.filter(id => id !== user.uid) : [...prev, user.uid]
+                                          );
+                                        }}
+                                        style={{ width: '14px', height: '14px', cursor: 'pointer' }}
+                                      />
+                                    </td>
+                                    <td style={{ padding: '0.5rem 0.75rem' }}>
+                                      <strong>{user.name}</strong>
+                                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>@{user.username}</div>
+                                    </td>
+                                    <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem' }}>{user.email}</td>
+                                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--accent-gold)' }}>{user.xp} XP</td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                        Selected: {selectedJobUserIds.length} user(s)
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3 (All users) or Step 4 (Specific users): Rewards Pool */}
+                {((jobStep === 3 && jobAssignedType === "all") || (jobStep === 4 && jobAssignedType === "specific")) && (
+                  <div className="stepper-content-body" style={{ minHeight: '260px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="job-xp">XP Reward</label>
+                      <input
+                        id="job-xp"
+                        type="number"
+                        className="form-control"
+                        placeholder="e.g. 50"
+                        value={jobXPReward}
+                        onChange={(e) => setJobXPReward(e.target.value)}
+                        required
+                      />
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem", display: "inline-block", lineHeight: '1.4' }}>
+                        Leveling points awarded directly to the user's permanent XP balance upon job approval.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 4 (All users) or Step 5 (Specific users): Submission Format */}
+                {((jobStep === 4 && jobAssignedType === "all") || (jobStep === 5 && jobAssignedType === "specific")) && (
+                  <div className="stepper-content-body" style={{ minHeight: '260px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div className="form-group">
+                      <label className="form-label" style={{ marginBottom: "0.25rem" }}>Required Deliverables</label>
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "1rem" }}>
+                        Specify one or multiple deliverable formats that users must submit to complete this job.
+                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={jobRequiredFields.includes("text")}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setJobRequiredFields(prev => [...prev, "text"]);
+                              } else {
+                                setJobRequiredFields(prev => prev.filter(f => f !== "text"));
+                              }
+                            }}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          Short Answer (Textbox)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={jobRequiredFields.includes("textarea")}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setJobRequiredFields(prev => [...prev, "textarea"]);
+                              } else {
+                                setJobRequiredFields(prev => prev.filter(f => f !== "textarea"));
+                              }
+                            }}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          Detailed Solution (Textarea)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={jobRequiredFields.includes("link")}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setJobRequiredFields(prev => [...prev, "link"]);
+                              } else {
+                                setJobRequiredFields(prev => prev.filter(f => f !== "link"));
+                              }
+                            }}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          Resource Link (URL)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={jobRequiredFields.includes("upload")}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setJobRequiredFields(prev => [...prev, "upload"]);
+                              } else {
+                                setJobRequiredFields(prev => prev.filter(f => f !== "upload"));
+                              }
+                            }}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          File Attachment (Max 5MB / Auto-compressed images)
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stepper Footer Controls */}
+                {(() => {
+                  const totalSteps = jobAssignedType === "all" ? 4 : 5;
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+                      <div>
+                        {jobStep > 1 && (
+                          <button key="job-back-btn" type="button" className="btn btn-secondary" onClick={() => { setIsJobCalendarPopupOpen(false); setJobStep(prev => prev - 1); }}>
+                            Back
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button key="job-cancel-btn" type="button" className="btn btn-secondary" onClick={closeJobModal}>
+                          Cancel
+                        </button>
+                        {jobStep < totalSteps ? (
+                          <button
+                            key="job-next-btn"
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => {
+                              if (jobStep === 1) {
+                                  if (!jobTitle.trim() || !jobDescription.trim()) {
+                                    onShowToast("Job title and description are required.", "error");
+                                    return;
+                                  }
+                              } else if (jobStep === 2) {
+                                if (!jobDeadline) {
+                                  onShowToast("Job deadline date & time are required.", "error");
+                                  return;
+                                }
+                              } else if (jobStep === 3 && jobAssignedType === "specific") {
+                                if (selectedJobUserIds.length === 0) {
+                                  onShowToast("Please select at least one user to assign the job.", "error");
+                                  return;
+                                }
+                              }
+                              setIsJobCalendarPopupOpen(false);
+                              setJobStep(prev => prev + 1);
+                            }}
+                          >
+                            Next
+                          </button>
+                        ) : (
+                          <button key="job-submit-btn" type="submit" className="btn btn-primary" style={{ backgroundColor: 'var(--success)', borderColor: 'var(--success)', color: '#fff' }} disabled={jobCreating}>
+                            {jobCreating ? (editingJob ? "Saving..." : "Launching...") : (editingJob ? "Save Changes" : "Launch Job")}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Job Submissions Modal */}
+      {isJobSubmissionsModalOpen && selectedJobForSubmissions && (
+        <div className="modal-overlay" onClick={() => { setIsJobSubmissionsModalOpen(false); setModalJobTab("pending"); }}>
+          <div className="modal-content" style={{ maxWidth: '680px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+              <div className="modal-title">Submissions: {selectedJobForSubmissions.title}</div>
+              <button type="button" className="modal-close-btn" onClick={() => { setIsJobSubmissionsModalOpen(false); setModalJobTab("pending"); }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div style={{ display: 'flex', gap: '1rem', padding: '0 1.5rem', borderBottom: '1px solid var(--border-color)', marginTop: '1rem' }}>
+              <button
+                type="button"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: modalJobTab === "pending" ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: modalJobTab === "pending" ? 'var(--text-primary)' : 'var(--text-muted)',
+                  padding: '0.5rem 0.25rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setModalJobTab("pending")}
+              >
+                Pending Approvals ({modalJobSubmissions.filter(s => s.status === 'pending').length})
+              </button>
+              <button
+                type="button"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: modalJobTab === "approved" ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: modalJobTab === "approved" ? 'var(--text-primary)' : 'var(--text-muted)',
+                  padding: '0.5rem 0.25rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setModalJobTab("approved")}
+              >
+                Approved ({modalJobSubmissions.filter(s => s.status === 'approved').length})
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto', padding: '1.5rem' }}>
+              {modalJobSubmissionsLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+                  <div className="spinner"></div>
+                </div>
+              ) : modalJobTab === "pending" ? (
+                modalJobSubmissions.filter(sub => sub.status === 'pending').length === 0 ? (
+                  <div className="empty-placeholder">
+                    No pending submissions for this job.
+                  </div>
+                ) : (
+                  <div className="pending-submissions-list">
+                    {modalJobSubmissions
+                      .filter(sub => sub.status === 'pending')
+                      .sort((a, b) => new Date(a.submittedAt.toDate()).getTime() - new Date(b.submittedAt.toDate()).getTime())
+                      .map((sub, index) => {
+                        const isGradingDisabled = index > 0;
+                        return (
+                          <div key={sub.id} className="submission-item-row" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', marginBottom: '1rem', opacity: isGradingDisabled ? 0.7 : 1 }}>
+                            <div className="submission-meta" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', marginRight: '2rem' }}>
+                              <div className="submission-user-info" style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span className="submission-user-name" style={{ fontSize: '1.05rem', fontWeight: 600 }}>{sub.userName}</span>
+                                <span className="submission-user-email" style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{sub.userEmail}</span>
+                              </div>
+                              <span className="submission-submitted-at" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                Submitted: {new Date(sub.submittedAt.toDate()).toLocaleString()}
+                              </span>
+                              <div className="submission-content-box" style={{ marginTop: '0.5rem', width: '100%', maxWidth: '800px' }}>{renderSubmissionContent(sub.content)}</div>
+                            </div>
+                            <div className="submission-actions-row" style={{ flexShrink: 0, gap: '0.75rem', display: 'flex', flexDirection: 'column', minWidth: '110px' }}>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                style={{ backgroundColor: isGradingDisabled ? 'var(--text-muted)' : "var(--success)", width: '100%', cursor: isGradingDisabled ? 'not-allowed' : 'pointer' }}
+                                disabled={isGradingDisabled}
+                                title={isGradingDisabled ? "Please grade older submissions first" : ""}
+                                onClick={() => handleJobSubmissionAction(sub, "approve")}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ borderColor: isGradingDisabled ? 'var(--border-color)' : "var(--danger)", color: isGradingDisabled ? 'var(--text-muted)' : "var(--danger)", width: '100%', cursor: isGradingDisabled ? 'not-allowed' : 'pointer' }}
+                                disabled={isGradingDisabled}
+                                title={isGradingDisabled ? "Please grade older submissions first" : ""}
+                                onClick={() => handleJobSubmissionAction(sub, "reject")}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )
+              ) : (
+                modalJobSubmissions.filter(sub => sub.status === 'approved').length === 0 ? (
+                  <div className="empty-placeholder">
+                    No approved submissions for this job.
+                  </div>
+                ) : (
+                  <div className="pending-submissions-list">
+                    {modalJobSubmissions
+                      .filter(sub => sub.status === 'approved')
+                      .map((sub) => {
+                        return (
+                          <div key={sub.id} className="submission-item-row" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'stretch', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div className="submission-user-info">
+                                <span className="submission-user-name" style={{ fontSize: '1rem', fontWeight: 600 }}>{sub.userName}</span>
+                                <span className="submission-user-email" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{sub.userEmail}</span>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+                                <span className="submission-submitted-at" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  Submitted: {new Date(sub.submittedAt.toDate()).toLocaleString()}
+                                </span>
+                                <span className="status-capsule active" style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', backgroundColor: 'var(--success)', color: '#fff', width: 'fit-content' }}>
+                                  Approved (+{sub.xpAwarded} XP)
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="submission-content-box" style={{ width: '100%' }}>
+                              {renderSubmissionContent(sub.content)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isJobCalendarPopupOpen && jobStep === 2 && createPortal(
+        <>
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 1090,
+              background: 'rgba(0, 0, 0, 0.4)',
+              backdropFilter: 'blur(2px)',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsJobCalendarPopupOpen(false);
+            }}
+          />
+          <div
+            className="calendar-popup-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ zIndex: 1100 }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {!selectedJobCalendarDate ? (
+                <>
+                  {/* Month selector header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.2rem 0.4rem', minWidth: '28px', fontSize: '0.75rem' }}
+                      onClick={handlePrevMonth}
+                    >
+                      &larr;
+                    </button>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {getMonthName(currentCalendarMonth)} {currentCalendarYear}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.2rem 0.4rem', minWidth: '28px', fontSize: '0.75rem' }}
+                      onClick={handleNextMonth}
+                    >
+                      &rarr;
+                    </button>
+                  </div>
+                  
+                  {/* Days of week and days grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', padding: '0.35rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-color)' }}>
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
+                      <div key={d} style={{ textAlign: 'center', fontSize: '0.65rem', fontWeight: '700', color: 'var(--text-muted)', padding: '0.1rem 0' }}>
+                        {d}
+                      </div>
+                    ))}
+                    {(() => {
+                      const daysInMonth = getDaysInMonth(currentCalendarMonth, currentCalendarYear);
+                      const firstDayIndex = getFirstDayOfMonth(currentCalendarMonth, currentCalendarYear);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+
+                      const cells: React.ReactNode[] = [];
+
+                      // Empty cells for days before the first of the month
+                      for (let i = 0; i < firstDayIndex; i++) {
+                        cells.push(<div key={`empty-${i}`} style={{ width: '100%', aspectRatio: '1', padding: '0.25rem' }}></div>);
+                      }
+
+                      // Days in the month
+                      for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+                        const cellDate = new Date(currentCalendarYear, currentCalendarMonth, dayNum);
+                        const isSelected = selectedJobCalendarDate && 
+                          (selectedJobCalendarDate as any).getDate() === dayNum && 
+                          (selectedJobCalendarDate as any).getMonth() === currentCalendarMonth && 
+                          (selectedJobCalendarDate as any).getFullYear() === currentCalendarYear;
+                        
+                        const isToday = today.getDate() === dayNum && 
+                          today.getMonth() === currentCalendarMonth && 
+                          today.getFullYear() === currentCalendarYear;
+
+                        const isPast = cellDate < today;
+
+                        cells.push(
+                          <button
+                            key={`day-${dayNum}`}
+                            type="button"
+                            disabled={isPast}
+                            onClick={() => {
+                              setSelectedJobCalendarDate(cellDate);
+                              updateJobDeadlineFromCalendar(cellDate, jobCalendarHour, jobCalendarMinute);
+                            }}
+                            style={{
+                              width: '100%',
+                              aspectRatio: '1',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.7rem',
+                              fontWeight: isSelected ? '700' : '500',
+                              borderRadius: '6px',
+                              border: 'none',
+                              cursor: isPast ? 'not-allowed' : 'pointer',
+                              backgroundColor: isSelected 
+                                ? 'var(--primary)' 
+                                : isToday 
+                                  ? 'var(--bg-surface-hover)' 
+                                  : 'transparent',
+                              color: isSelected 
+                                ? '#fff' 
+                                : isPast 
+                                  ? 'var(--text-muted)' 
+                                  : 'var(--text-primary)',
+                              transition: 'all var(--transition-fast)',
+                              outline: 'none',
+                            }}
+                          >
+                            {dayNum}
+                          </button>
+                        );
+                      }
+
+                      return cells;
+                    })()}
+                  </div>
+                </>
+              ) : (
+                /* Selected date / time details */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Date: <strong style={{ color: 'var(--text-primary)' }}>{selectedJobCalendarDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      style={{ background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', padding: 0 }}
+                      onClick={() => {
+                        setSelectedJobCalendarDate(null);
+                      }}
+                    >
+                      Change Date
+                    </button>
+                  </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', margin: '0.25rem 0' }}>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginRight: '0.25rem' }}>Time (24h):</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={23}
+                      className="form-control"
+                      style={{ padding: '0.25rem', width: '55px', textAlign: 'center', fontSize: '0.75rem', height: '30px' }}
+                      value={jobCalendarHour}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        setJobCalendarHour(val);
+                        updateJobDeadlineFromCalendar(selectedJobCalendarDate, val, jobCalendarMinute);
+                      }}
+                      onBlur={(e) => {
+                        let val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val < 0) val = 0;
+                        if (val > 23) val = 23;
+                        const formatted = String(val).padStart(2, '0');
+                        setJobCalendarHour(formatted);
+                        updateJobDeadlineFromCalendar(selectedJobCalendarDate, formatted, jobCalendarMinute);
+                      }}
+                    />
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 'bold', fontSize: '0.75rem' }}>:</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      className="form-control"
+                      style={{ padding: '0.25rem', width: '55px', textAlign: 'center', fontSize: '0.75rem', height: '30px' }}
+                      value={jobCalendarMinute}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        setJobCalendarMinute(val);
+                        updateJobDeadlineFromCalendar(selectedJobCalendarDate, jobCalendarHour, val);
+                      }}
+                      onBlur={(e) => {
+                        let val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val < 0) val = 0;
+                        if (val > 59) val = 59;
+                        const formatted = String(val).padStart(2, '0');
+                        setJobCalendarMinute(formatted);
+                        updateJobDeadlineFromCalendar(selectedJobCalendarDate, jobCalendarHour, formatted);
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ width: '100%', marginTop: '0.25rem', height: '28px', fontSize: '0.75rem', padding: '0' }}
+                    onClick={() => setIsJobCalendarPopupOpen(false)}
+                  >
+                    Confirm & Save
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>,
+        document.body
       )}
 
       {/* User Creation Modal */}
@@ -2627,6 +4375,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                   </div>
                 )
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Suspend User Modal */}
+      {isSuspendModalOpen && userToSuspend && (
+        <div className="modal-overlay" onClick={() => { setIsSuspendModalOpen(false); setUserToSuspend(null); }}>
+          <div className="modal-content" style={{ maxWidth: '450px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">Suspend @{userToSuspend.username}</div>
+              <button type="button" className="modal-close-btn" onClick={() => { setIsSuspendModalOpen(false); setUserToSuspend(null); }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={handleConfirmSuspend}>
+                <div className="form-group">
+                  <label className="form-label">Suspension Type</label>
+                  <div className="toggle-btn-group" style={{ marginBottom: '1.25rem' }}>
+                    <button
+                      type="button"
+                      className={`toggle-option ${suspendType === "day" ? "active" : ""}`}
+                      onClick={() => {
+                        setSuspendType("day");
+                      }}
+                    >
+                      Day Wise
+                    </button>
+                    <button
+                      type="button"
+                      className={`toggle-option ${suspendType === "hour" ? "active" : ""}`}
+                      onClick={() => {
+                        setSuspendType("hour");
+                        setSuspendDays("0");
+                      }}
+                    >
+                      Hour Wise
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Duration</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {suspendType === "day" && (
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Days</span>
+                        <input
+                          type="number"
+                          min="0"
+                          className="form-control"
+                          placeholder="0"
+                          value={suspendDays}
+                          onChange={(e) => setSuspendDays(e.target.value)}
+                          required
+                        />
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Hours</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={suspendType === "hour" ? 23 : undefined}
+                        className="form-control"
+                        placeholder="0"
+                        value={suspendHours}
+                        onChange={(e) => setSuspendHours(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Minutes</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={59}
+                        className="form-control"
+                        placeholder="0"
+                        value={suspendMinutes}
+                        onChange={(e) => setSuspendMinutes(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  {suspendType === "hour" && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem', display: 'block' }}>
+                      * Hour-wise suspension is limited to a single day (max 23 hours, 59 minutes).
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => { setIsSuspendModalOpen(false); setUserToSuspend(null); }}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" style={{ backgroundColor: 'var(--danger)', borderColor: 'var(--danger)', color: '#fff' }}>
+                    Confirm Suspension
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
