@@ -14,6 +14,43 @@ interface AdminDashboardProps {
   onBackToUser: () => void;
 }
 
+const CompactSuspensionCountdown: React.FC<{ suspendedUntil: string }> = ({ suspendedUntil }) => {
+  const [timeLeft, setTimeLeft] = useState("");
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const difference = new Date(suspendedUntil).getTime() - Date.now();
+      if (difference <= 0) {
+        setTimeLeft("00:00:00");
+        return;
+      }
+
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((difference / 1000 / 60) % 60);
+      const seconds = Math.floor((difference / 1000) % 60);
+
+      const parts = [];
+      if (days > 0) parts.push(`${days}d`);
+      parts.push(String(hours).padStart(2, "0"));
+      parts.push(String(minutes).padStart(2, "0"));
+      parts.push(String(seconds).padStart(2, "0"));
+
+      setTimeLeft(parts.join(":"));
+    };
+
+    calculateTimeLeft();
+    const interval = setInterval(calculateTimeLeft, 1000);
+    return () => clearInterval(interval);
+  }, [suspendedUntil]);
+
+  return (
+    <span style={{ fontSize: "0.65rem", color: "var(--accent-gold)", marginLeft: "0.25rem", fontFamily: "monospace" }}>
+      ({timeLeft})
+    </span>
+  );
+};
+
 // Helpers to map Supabase snake_case rows to the camelCase formats with mock Firebase timestamps (.toDate())
 const mapUser = (u: any) => ({
   uid: u.uid,
@@ -2266,9 +2303,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                                     </span>
                                   )}
                                   {isSuspended && (
-                                    <span className="brand-badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: 'var(--accent-gold)', borderColor: 'rgba(245, 158, 11, 0.2)', marginLeft: '0.5rem', fontSize: '0.6rem', padding: '0.1rem 0.35rem' }}>
-                                      Suspended
-                                    </span>
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                      <span className="brand-badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: 'var(--accent-gold)', borderColor: 'rgba(245, 158, 11, 0.2)', marginLeft: '0.5rem', fontSize: '0.6rem', padding: '0.1rem 0.35rem' }}>
+                                        Suspended
+                                      </span>
+                                      <CompactSuspensionCountdown suspendedUntil={user.suspendedUntil} />
+                                    </div>
                                   )}
                                 </td>
                                 <td>@{user.username}</td>

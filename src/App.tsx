@@ -14,6 +14,54 @@ interface Toast {
   type: "success" | "error";
 }
 
+const SuspensionCountdown: React.FC<{ suspendedUntil: string }> = ({ suspendedUntil }) => {
+  const [timeLeft, setTimeLeft] = useState("");
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const difference = new Date(suspendedUntil).getTime() - Date.now();
+      if (difference <= 0) {
+        setTimeLeft("00:00:00");
+        return;
+      }
+
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((difference / 1000 / 60) % 60);
+      const seconds = Math.floor((difference / 1000) % 60);
+
+      const parts = [];
+      if (days > 0) parts.push(`${days}d`);
+      parts.push(String(hours).padStart(2, "0"));
+      parts.push(String(minutes).padStart(2, "0"));
+      parts.push(String(seconds).padStart(2, "0"));
+
+      setTimeLeft(parts.join(":"));
+    };
+
+    calculateTimeLeft();
+    const interval = setInterval(calculateTimeLeft, 1000);
+    return () => clearInterval(interval);
+  }, [suspendedUntil]);
+
+  return (
+    <div style={{ 
+      fontSize: "0.9rem", 
+      fontWeight: 700, 
+      color: "var(--accent-gold)", 
+      marginTop: "0.5rem",
+      backgroundColor: "rgba(245, 158, 11, 0.05)",
+      border: "1px solid rgba(245, 158, 11, 0.15)",
+      padding: "0.25rem 0.75rem",
+      borderRadius: "9999px",
+      letterSpacing: "0.05em",
+      display: "inline-block"
+    }}>
+      Time Remaining: {timeLeft}
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -232,25 +280,28 @@ const App: React.FC = () => {
       ) : userProfile?.suspended_until && new Date(userProfile.suspended_until) > new Date() ? (
         <div className="auth-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '1rem' }}>
           <div className="login-card" style={{ maxWidth: "500px", width: '100%', textAlign: "center", padding: "3rem 2rem", background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-lg)', boxShadow: 'var(--shadow-lg)' }}>
-            <div style={{ 
-              width: "80px", 
-              height: "80px", 
-              borderRadius: "50%", 
-              backgroundColor: "rgba(245, 158, 11, 0.1)", 
-              border: "1px solid rgba(245, 158, 11, 0.2)",
-              color: "var(--accent-gold)",
-              display: "flex", 
-              alignItems: "center", 
-              justifyContent: "center", 
-              margin: "0 auto 1.5rem" 
-            }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-                <polyline points="12 14 12 16 14 16" />
-              </svg>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ 
+                width: "80px", 
+                height: "80px", 
+                borderRadius: "50%", 
+                backgroundColor: "rgba(245, 158, 11, 0.1)", 
+                border: "1px solid rgba(245, 158, 11, 0.2)",
+                color: "var(--accent-gold)",
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "center", 
+                marginBottom: "0.75rem" 
+              }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                  <polyline points="12 14 12 16 14 16" />
+                </svg>
+              </div>
+              <SuspensionCountdown suspendedUntil={userProfile.suspended_until} />
             </div>
             
             <h2 style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: "1rem" }}>
