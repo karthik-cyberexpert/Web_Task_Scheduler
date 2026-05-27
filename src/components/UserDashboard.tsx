@@ -153,6 +153,38 @@ const SubmissionStarRating: React.FC<{
   );
 };
 
+const QuestTimerCountdown: React.FC<{ targetDate: string; onExpire?: () => void }> = ({ targetDate, onExpire }) => {
+  const [timeLeft, setTimeLeft] = useState("");
+
+  useEffect(() => {
+    const calculate = () => {
+      const diff = new Date(targetDate).getTime() - Date.now();
+      if (diff <= 0) {
+        setTimeLeft("00:00");
+        if (onExpire) onExpire();
+        return;
+      }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / 1000 / 60) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+
+      const parts = [];
+      if (days > 0) parts.push(`${days}d`);
+      parts.push(String(hours).padStart(2, "0"));
+      parts.push(String(minutes).padStart(2, "0"));
+      parts.push(String(seconds).padStart(2, "0"));
+      setTimeLeft(parts.join(":"));
+    };
+
+    calculate();
+    const interval = setInterval(calculate, 1000);
+    return () => clearInterval(interval);
+  }, [targetDate]);
+
+  return <span style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{timeLeft}</span>;
+};
+
 const compressImage = async (file: File): Promise<File> => {
   return new Promise((resolve) => {
     if (!file.type.startsWith("image/")) {
@@ -433,9 +465,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   onNavigateToAdmin,
 }) => {
   // Navigation tabs: overview, tasks, leaderboard, evaluate, jobs
-  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "leaderboard" | "evaluate" | "jobs">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "leaderboard" | "evaluate" | "jobs" | "quests">("overview");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Quests state
+  const [questsList, setQuestsList] = useState<any[]>([]);
+  const [questParticipants, setQuestParticipants] = useState<any[]>([]);
+  const [activeQuestPortal, setActiveQuestPortal] = useState<any | null>(null);
+  const [questPortalAnswers, setQuestPortalAnswers] = useState<any[]>([]);
+  const [isQuestPortalOpen, setIsQuestPortalOpen] = useState(false);
+  const [questPortalSubmitting, setQuestPortalSubmitting] = useState(false);
+  const [questPortalAnimationState, setQuestPortalAnimationState] = useState<"idle" | "starting" | "active" | "ending">("idle");
+  const [joiningQuestId, setJoiningQuestId] = useState<string | null>(null);
 
   // Daily Rewards state
   const [isDailyRewardOpen, setIsDailyRewardOpen] = useState(false);
@@ -457,6 +499,80 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       .select("*")
       .order("min_xp", { ascending: true });
     if (!error && data) setAllLevels(data);
+  };
+
+  const fetchQuests = async () => {
+    const { data, error } = await supabase
+      .from("quests")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (!error && data) setQuestsList(data);
+  };
+
+  const fetchQuestParticipants = async () => {
+    const { data, error } = await supabase
+      .from("quest_participants")
+      .select("*")
+      .eq("user_id", currentUser.uid);
+    if (!error && data) setQuestParticipants(data);
+  };
+
+  const handleJoinQuest = async (questId: string) => {
+    setJoiningQuestId(questId);
+    // Delay for joining particle animation
+    await new Promise(resolve => setTimeout(resolve, 1200));
+
+    try {
+      const { error } = await supabase
+        .from("quest_participants")
+        .insert({
+          quest_id: questId,
+          user_id: currentUser.uid,
+          status: "joined",
+          joined_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      onShowToast("You have successfully joined the quest!", "success");
+      fetchQuestParticipants();
+    } catch (err: any) {
+      console.error("Error joining quest:", err);
+      onShowToast(err.message || "Failed to join quest.", "error");
+    } finally {
+      setJoiningQuestId(null);
+    }
+  };
+
+  const handleQuestPortalSubmit = async () => {
+    if (!activeQuestPortal) return;
+    setQuestPortalSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("quest_participants")
+        .update({
+          submission: { answers: questPortalAnswers },
+          status: "submitted",
+        })
+        .eq("quest_id", activeQuestPortal.id)
+        .eq("user_id", currentUser.uid);
+
+      if (error) throw error;
+
+      setQuestPortalAnimationState("ending");
+      await new Promise(resolve => setTimeout(resolve, 2500));
+
+      setIsQuestPortalOpen(false);
+      setActiveQuestPortal(null);
+      setQuestPortalAnswers([]);
+      setQuestPortalAnimationState("idle");
+      onShowToast("Quest answers submitted successfully!", "success");
+      fetchQuestParticipants();
+    } catch (err: any) {
+      console.error("Error submitting quest:", err);
+      onShowToast(err.message || "Failed to submit quest answers.", "error");
+    } finally {
+      setQuestPortalSubmitting(false);
+    }
   };
 
   // Helper: Get current level info from XP
@@ -565,7 +681,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         fetchSubmissions(),
         fetchEvaluations(),
         fetchJobs(),
-        fetchJobSubmissions()
+        fetchJobSubmissions(),
+        fetchQuests(),
+        fetchQuestParticipants()
       ]);
       onShowToast("Dashboard data refreshed!", "success");
     } catch (err: any) {
@@ -791,6 +909,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     fetchJobs();
     fetchJobSubmissions();
     fetchLevels();
+    fetchQuests();
+    fetchQuestParticipants();
 
     const usersChannel = supabase
       .channel("users-user")
@@ -834,6 +954,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       })
       .subscribe();
 
+    const questsChannel = supabase
+      .channel("quests-user")
+      .on("postgres_changes", { event: "*", schema: "public", table: "quests" }, fetchQuests)
+      .subscribe();
+
+    const questParticipantsChannel = supabase
+      .channel("quest-participants-user")
+      .on("postgres_changes", { event: "*", schema: "public", table: "quest_participants" }, () => {
+        fetchQuestParticipants();
+        fetchUsers();
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(usersChannel);
       supabase.removeChannel(tasksChannel);
@@ -841,6 +974,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       supabase.removeChannel(ratingsChannel);
       supabase.removeChannel(jobsChannel);
       supabase.removeChannel(jobSubmissionsChannel);
+      supabase.removeChannel(questsChannel);
+      supabase.removeChannel(questParticipantsChannel);
     };
   }, [currentUser.uid]);
 
@@ -1579,6 +1714,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
               </svg>
               Leaderboard
+            </button>
+            <button
+              className={`sidebar-nav-item ${activeTab === "quests" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("quests");
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+              Quests
             </button>
             {userProfile?.role === "admin" && onNavigateToAdmin && (
               <button
@@ -2606,6 +2753,187 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </>
           )}
 
+          {activeTab === "quests" && (
+            <>
+              <style>{`
+                @keyframes floatParticle {
+                  0% { transform: translateY(0) scale(1); opacity: 0; }
+                  50% { opacity: 0.8; }
+                  100% { transform: translateY(-40px) scale(0.5); opacity: 0; }
+                }
+                .particle-emitter {
+                  position: absolute;
+                  top: 0; left: 0; width: 100%; height: 100%;
+                  pointer-events: none;
+                  overflow: hidden;
+                }
+                .particle {
+                  position: absolute;
+                  bottom: 10%;
+                  width: 6px;
+                  height: 6px;
+                  background: var(--accent-gold);
+                  border-radius: 50%;
+                  animation: floatParticle 1.2s infinite ease-out;
+                }
+              `}</style>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div className="dashboard-view-title" style={{ marginBottom: 0 }}>Quest Portal</div>
+              </div>
+              <p className="dashboard-view-desc">Unlock special weekly and monthly quests to test your skills and earn extreme XP rewards.</p>
+
+              {questsList.length === 0 ? (
+                <div className="empty-placeholder">No active quests are running on the platform right now. Check back later!</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem', marginTop: '1.5rem' }}>
+                  {questsList.map((quest) => {
+                    const now = new Date();
+                    const start = new Date(quest.start_time);
+                    const end = new Date(quest.end_time);
+                    const participant = questParticipants.find(p => p.quest_id === quest.id);
+                    
+                    const isJoined = !!participant;
+                    const isLocked = (userProfile?.exp ?? 0) < quest.min_exp || (userProfile?.xp ?? 0) < quest.min_xp;
+                    const isActive = now >= start && now <= end;
+                    const hasEnded = now > end;
+                    const isFuture = now < start;
+
+                    return (
+                      <SpotlightCard key={quest.id} className="card" spotlightColor="rgba(99, 102, 241, 0.1)">
+                        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '260px' }}>
+                          
+                          {joiningQuestId === quest.id && (
+                            <div className="particle-emitter">
+                              <div className="particle" style={{ left: '20%', animationDelay: '0.1s' }} />
+                              <div className="particle" style={{ left: '40%', animationDelay: '0.3s', background: 'var(--primary)' }} />
+                              <div className="particle" style={{ left: '60%', animationDelay: '0.5s' }} />
+                              <div className="particle" style={{ left: '80%', animationDelay: '0.2s', background: 'var(--secondary)' }} />
+                              <div className="particle" style={{ left: '50%', animationDelay: '0.7s' }} />
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <span className="brand-badge" style={{ textTransform: 'uppercase', fontSize: '0.65rem' }}>{quest.category}</span>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>
+                              {isFuture && (
+                                <span style={{ color: 'var(--accent-gold)' }}>
+                                  Starts in: <QuestTimerCountdown targetDate={quest.start_time} onExpire={fetchQuests} />
+                                </span>
+                              )}
+                              {isActive && (
+                                <span style={{ color: 'var(--success)' }}>
+                                  Ends in: <QuestTimerCountdown targetDate={quest.end_time} onExpire={fetchQuests} />
+                                </span>
+                              )}
+                              {hasEnded && <span style={{ color: 'var(--text-muted)' }}>Quest Ended</span>}
+                            </div>
+                          </div>
+
+                          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 0.5rem 0', color: 'var(--text-primary)' }}>{quest.title}</h3>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', flex: 1, margin: '0 0 1rem 0', lineHeight: 1.4 }}>{quest.description}</p>
+
+                          <div style={{ background: 'var(--bg-base)', padding: '0.75rem', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-color)', marginBottom: '1rem' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Joining Requirements:</div>
+                            <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem' }}>
+                              <span style={{ color: (userProfile?.exp ?? 0) >= quest.min_exp ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                                {quest.min_exp} EXP {(userProfile?.exp ?? 0) >= quest.min_exp ? '✓' : '✗'}
+                              </span>
+                              <span style={{ color: (userProfile?.xp ?? 0) >= quest.min_xp ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                                {quest.min_xp} XP {(userProfile?.xp ?? 0) >= quest.min_xp ? '✓' : '✗'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem', fontSize: '0.8rem' }}>
+                            <div>Reward: <strong style={{ color: 'var(--primary-hover)' }}>+{(quest.quest_data || []).reduce((acc: number, q: any) => acc + (q.exp_reward || 0), 0)} EXP</strong></div>
+                            <div>Leveling: <strong style={{ color: 'var(--accent-gold)' }}>+{(quest.quest_data || []).reduce((acc: number, q: any) => acc + (q.xp_reward || 0), 0)} XP</strong></div>
+                          </div>
+
+                          {(() => {
+                            if (isLocked && !isJoined) {
+                              return (
+                                <button className="btn btn-secondary btn-block" disabled style={{ opacity: 0.6 }}>
+                                  Locked (Reqs Not Met)
+                                </button>
+                              );
+                            }
+                            if (!isJoined) {
+                              if (hasEnded) {
+                                return <button className="btn btn-secondary btn-block" disabled>Quest Closed</button>;
+                              }
+                              return (
+                                <button
+                                  className="btn btn-primary btn-block animate-pulse"
+                                  onClick={() => handleJoinQuest(quest.id)}
+                                  disabled={joiningQuestId !== null}
+                                >
+                                  {joiningQuestId === quest.id ? "Joining..." : "Join Quest"}
+                                </button>
+                              );
+                            }
+
+                            if (participant.status === "joined") {
+                              if (isFuture) {
+                                return (
+                                  <button className="btn btn-secondary btn-block" disabled style={{ color: 'var(--accent-gold)' }}>
+                                    Joined & Awaiting Start
+                                  </button>
+                                );
+                              }
+                              if (isActive) {
+                                return (
+                                  <button
+                                    className="btn btn-primary btn-block"
+                                    style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)', border: 'none', color: '#fff', fontWeight: 'bold' }}
+                                    onClick={() => {
+                                      setActiveQuestPortal(quest);
+                                      setQuestPortalAnswers(new Array((quest.quest_data || []).length).fill(""));
+                                      setQuestPortalAnimationState("starting");
+                                      setIsQuestPortalOpen(true);
+                                      setTimeout(() => {
+                                        setQuestPortalAnimationState("active");
+                                      }, 2200);
+                                    }}
+                                  >
+                                    Enter Quest Portal
+                                  </button>
+                                );
+                              }
+                              return <button className="btn btn-secondary btn-block" disabled style={{ color: 'var(--danger)' }}>Missed Quest</button>;
+                            }
+
+                            if (participant.status === "submitted") {
+                              return <button className="btn btn-secondary btn-block" disabled style={{ color: 'var(--accent-gold)' }}>Awaiting Grading</button>;
+                            }
+
+                            if (participant.status === "completed") {
+                              return (
+                                <div style={{ textAlign: 'center', background: 'rgba(16, 185, 129, 0.1)', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--success)', color: 'var(--success)', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                                  Completed (Score: {participant.score})
+                                </div>
+                              );
+                            }
+
+                            if (participant.status === "failed") {
+                              return (
+                                <div style={{ textAlign: 'center', background: 'rgba(239, 68, 68, 0.1)', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--danger)', color: 'var(--danger)', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                                  Graded: Failed
+                                </div>
+                              );
+                            }
+
+                            return null;
+                          })()}
+
+                        </div>
+                      </SpotlightCard>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
         </main>
       </div>
 
@@ -3261,6 +3589,232 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
         );
       })()}
+      {/* Quest Portal Fullscreen overlay */}
+      {isQuestPortalOpen && activeQuestPortal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: '#090a0f',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontFamily: 'var(--font-sans)',
+          overflow: 'hidden'
+        }}>
+          <style>{`
+            @keyframes portalRotate {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+            @keyframes portalPulse {
+              0%, 100% { transform: scale(1); opacity: 0.6; }
+              50% { transform: scale(1.05); opacity: 0.9; }
+            }
+            @keyframes earthShake {
+              0%, 100% { transform: translate(0, 0); }
+              10% { transform: translate(-3px, 2px); }
+              30% { transform: translate(3px, -2px); }
+              50% { transform: translate(-3px, -2px); }
+              70% { transform: translate(3px, 2px); }
+            }
+            .shake-container {
+              animation: earthShake 0.4s infinite;
+            }
+            .spinning-ring {
+              position: absolute;
+              width: 300px;
+              height: 300px;
+              border: 4px dashed var(--primary);
+              border-radius: 50%;
+              animation: portalRotate 8s linear infinite;
+            }
+            .spinning-ring-inner {
+              position: absolute;
+              width: 260px;
+              height: 260px;
+              border: 2px solid var(--secondary);
+              border-radius: 50%;
+              animation: portalRotate 4s linear infinite reverse;
+              opacity: 0.7;
+            }
+            .glow-circle {
+              position: absolute;
+              width: 220px;
+              height: 220px;
+              background: radial-gradient(circle, rgba(6,182,212,0.4) 0%, rgba(99,102,241,0.1) 70%, transparent 100%);
+              border-radius: 50%;
+              animation: portalPulse 3s infinite ease-in-out;
+            }
+            .portal-shrink {
+              transition: transform 2s cubic-bezier(0.6, -0.28, 0.735, 0.045), opacity 1.5s ease-out;
+              transform: scale(0);
+              opacity: 0;
+            }
+          `}</style>
+
+          {/* Starting State Animation */}
+          {questPortalAnimationState === "starting" && (
+            <div className="shake-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              <div className="glow-circle" />
+              <div className="spinning-ring" />
+              <div className="spinning-ring-inner" style={{ borderStyle: 'dotted' }} />
+              <div style={{ zIndex: 10, textAlign: 'center', padding: '1rem' }}>
+                <h1 style={{ fontSize: '2.5rem', fontWeight: 900, background: 'linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '0 0 1rem 0', letterSpacing: '2px' }}>
+                  QUEST STARTING
+                </h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>Calibrating temporal coordinates... Prepare your mind!</p>
+              </div>
+            </div>
+          )}
+
+          {/* Active Portal Questionnaire */}
+          {questPortalAnimationState === "active" && (
+            <div style={{ width: '100%', maxWidth: '650px', height: '100vh', display: 'flex', flexDirection: 'column', padding: '2rem', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <span className="brand-badge" style={{ fontSize: '0.65rem' }}>ACTIVE QUEST</span>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '4px 0 0 0' }}>{activeQuestPortal.title}</h2>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Time Remaining:</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--danger)' }}>
+                    <QuestTimerCountdown targetDate={activeQuestPortal.end_time} onExpire={handleQuestPortalSubmit} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Questions Area */}
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '0.5rem' }}>
+                {(activeQuestPortal.quest_data || []).map((q: any, idx: number) => {
+                  return (
+                    <div key={idx} style={{ background: '#131520', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '8px', padding: '1.25rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--primary-hover)' }}>Question {idx + 1}</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--accent-gold)' }}>+{q.xp_reward} XP / +{q.exp_reward} EXP</span>
+                      </div>
+                      <p style={{ fontSize: '0.9rem', color: '#e2e8f0', margin: '0 0 1rem 0', fontWeight: 500, lineHeight: 1.4 }}>{q.question}</p>
+
+                      {/* Render input by type */}
+                      {q.type === "mcq" && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {(q.options || []).map((opt: string, oIdx: number) => (
+                            <label key={oIdx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: questPortalAnswers[idx] === opt ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.02)', borderRadius: '4px', border: questPortalAnswers[idx] === opt ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.05)', cursor: 'pointer', fontSize: '0.85rem' }}>
+                              <input
+                                type="radio"
+                                name={`q-${idx}`}
+                                value={opt}
+                                checked={questPortalAnswers[idx] === opt}
+                                onChange={() => {
+                                  const updated = [...questPortalAnswers];
+                                  updated[idx] = opt;
+                                  setQuestPortalAnswers(updated);
+                                }}
+                                style={{ accentColor: 'var(--primary)' }}
+                              />
+                              {opt}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+
+                      {q.type === "text" && (
+                        <textarea
+                          className="form-control"
+                          rows={3}
+                          placeholder="Type your response here..."
+                          value={questPortalAnswers[idx] || ""}
+                          onChange={(e) => {
+                            const updated = [...questPortalAnswers];
+                            updated[idx] = e.target.value;
+                            setQuestPortalAnswers(updated);
+                          }}
+                          style={{ background: 'rgba(255, 255, 255, 0.02)', color: '#fff', border: '1px solid rgba(255, 255, 255, 0.05)', resize: 'none' }}
+                        />
+                      )}
+
+                      {q.type === "link" && (
+                        <input
+                          type="url"
+                          className="form-control"
+                          placeholder="Paste URL link here (e.g. https://github.com/...)"
+                          value={questPortalAnswers[idx] || ""}
+                          onChange={(e) => {
+                            const updated = [...questPortalAnswers];
+                            updated[idx] = e.target.value;
+                            setQuestPortalAnswers(updated);
+                          }}
+                          style={{ background: 'rgba(255, 255, 255, 0.02)', color: '#fff', border: '1px solid rgba(255, 255, 255, 0.05)' }}
+                        />
+                      )}
+
+                      {q.type === "upload" && (
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Enter repository file path, submission text or link..."
+                          value={questPortalAnswers[idx] || ""}
+                          onChange={(e) => {
+                            const updated = [...questPortalAnswers];
+                            updated[idx] = e.target.value;
+                            setQuestPortalAnswers(updated);
+                          }}
+                          style={{ background: 'rgba(255, 255, 255, 0.02)', color: '#fff', border: '1px solid rgba(255, 255, 255, 0.05)' }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Submit panel */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '1.25rem', marginTop: '1.25rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    if (window.confirm("Are you sure you want to exit the portal? Your inputs will not be saved.")) {
+                      setIsQuestPortalOpen(false);
+                      setActiveQuestPortal(null);
+                      setQuestPortalAnswers([]);
+                    }
+                  }}
+                  style={{ borderColor: 'rgba(255,255,255,0.1)', color: '#94a3b8' }}
+                >
+                  Exit Portal
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)', border: 'none', fontWeight: 'bold' }}
+                  disabled={questPortalSubmitting}
+                  onClick={handleQuestPortalSubmit}
+                >
+                  {questPortalSubmitting ? "Submitting..." : "Submit Quest"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Ending State Animation */}
+          {questPortalAnimationState === "ending" && (
+            <div className="portal-shrink animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', transform: 'scale(1)', opacity: 1 }}>
+              <div className="glow-circle" style={{ animation: 'none', background: 'radial-gradient(circle, var(--accent-gold) 0%, transparent 70%)', transform: 'scale(0.8)' }} />
+              <div className="spinning-ring" style={{ borderColor: 'var(--accent-gold)' }} />
+              <div style={{ zIndex: 10, textAlign: 'center', padding: '1rem' }}>
+                <h1 style={{ fontSize: '2.2rem', fontWeight: 900, color: 'var(--accent-gold)', margin: '0 0 1rem 0', letterSpacing: '1px' }}>
+                  QUEST COMPLETED!
+                </h1>
+                <p style={{ color: '#e2e8f0', fontSize: '1rem', margin: '0 0 0.5rem 0' }}>Data coordinates saved. Portal collapsing...</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Awaiting administrator evaluation. Returning to dashboard...</p>
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
     </div>
   );
 };

@@ -273,9 +273,152 @@ const Pagination: React.FC<{
   );
 };
 
+const QuestQuestionBuilderForm: React.FC<{ onAdd: (q: any) => void }> = ({ onAdd }) => {
+  const [type, setType] = useState<"mcq" | "text" | "link" | "upload">("mcq");
+  const [question, setQuestion] = useState("");
+  const [options, setOptions] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [xp, setXp] = useState("10");
+  const [exp, setExp] = useState("50");
+
+  const handleAdd = () => {
+    if (!question.trim()) return;
+    const optArr = type === "mcq" ? options.split(",").map(o => o.trim()).filter(Boolean) : [];
+    
+    onAdd({
+      type,
+      question: question.trim(),
+      options: optArr,
+      answer: type === "mcq" ? answer.trim() : undefined,
+      xp_reward: parseInt(xp, 10) || 0,
+      exp_reward: parseInt(exp, 10) || 0
+    });
+
+    setQuestion("");
+    setOptions("");
+    setAnswer("");
+    setXp("10");
+    setExp("50");
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Type</label>
+          <select className="form-control" value={type} onChange={(e: any) => setType(e.target.value)} style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }}>
+            <option value="mcq">MCQ Choice</option>
+            <option value="text">Short/Long Text Response</option>
+            <option value="link">Resource Link Submission</option>
+            <option value="upload">File Upload</option>
+          </select>
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Question/Prompt</label>
+          <input type="text" className="form-control" value={question} onChange={e => setQuestion(e.target.value)} placeholder="Enter prompt..." style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+        </div>
+      </div>
+
+      {type === "mcq" && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Options (comma-separated)</label>
+            <input type="text" className="form-control" value={options} onChange={e => setOptions(e.target.value)} placeholder="e.g. A, B, C, D" style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Correct Answer</label>
+            <input type="text" className="form-control" value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Matches one option" style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'end' }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>XP Reward</label>
+          <input type="number" className="form-control" value={xp} onChange={e => setXp(e.target.value)} min={0} style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>EXP Reward</label>
+          <input type="number" className="form-control" value={exp} onChange={e => setExp(e.target.value)} min={0} style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+        </div>
+        <button type="button" className="btn btn-primary" onClick={handleAdd} style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', height: 'fit-content' }}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const QuestParticipantGradingAction: React.FC<{
+  maxScore: number;
+  defaultXp: number;
+  defaultExp: number;
+  onGrade: (score: number, xp: number, exp: number, success: boolean) => void;
+}> = ({ maxScore, defaultXp, defaultExp, onGrade }) => {
+  const [score, setScore] = useState(String(maxScore));
+  const [xp, setXp] = useState(String(defaultXp));
+  const [exp, setExp] = useState(String(defaultExp));
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'end', background: 'var(--bg-surface-hover)', padding: '0.75rem', borderRadius: '4px', marginTop: '0.5rem' }}>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Score (Max {maxScore})</label>
+        <input type="number" className="form-control" value={score} onChange={e => setScore(e.target.value)} min={0} style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+      </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>XP Awarded</label>
+        <input type="number" className="form-control" value={xp} onChange={e => setXp(e.target.value)} min={0} style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+      </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>EXP Awarded</label>
+        <input type="number" className="form-control" value={exp} onChange={e => setExp(e.target.value)} min={0} style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+      </div>
+      <div style={{ display: 'flex', gap: '0.35rem' }}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+          onClick={() => onGrade(parseInt(score, 10) || 0, parseInt(xp, 10) || 0, parseInt(exp, 10) || 0, true)}
+        >
+          Approve
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+          onClick={() => onGrade(0, 0, 0, false)}
+        >
+          Fail
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, currentUser, onBackToUser }) => {
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "users" | "leaderboard" | "jobs" | "levels">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "users" | "leaderboard" | "jobs" | "levels" | "quests">("overview");
+
+  // Quests state
+  const [questsList, setQuestsList] = useState<any[]>([]);
+  const [questParticipants, setQuestParticipants] = useState<any[]>([]);
+  const [isQuestModalOpen, setIsQuestModalOpen] = useState(false);
+  const [editingQuest, setEditingQuest] = useState<any | null>(null);
+  const [questTitle, setQuestTitle] = useState("");
+  const [questDescription, setQuestDescription] = useState("");
+  const [questCategory, setQuestCategory] = useState<"weekly" | "monthly">("weekly");
+  const [questStartTime, setQuestStartTime] = useState("");
+  const [questEndTime, setQuestEndTime] = useState("");
+  const [questMinExp, setQuestMinExp] = useState("0");
+  const [questMinXp, setQuestMinXp] = useState("0");
+  const [questQuestions, setQuestQuestions] = useState<any[]>([]);
+  const [questStep, setQuestStep] = useState(1);
+  const [questCreating, setQuestCreating] = useState(false);
+
+  const [selectedQuestForGrading, setSelectedQuestForGrading] = useState<any>(null);
+  const [isQuestGradingModalOpen, setIsQuestGradingModalOpen] = useState(false);
+  const [questGradingParticipants, setQuestGradingParticipants] = useState<any[]>([]);
+  const [questGradingLoading, setQuestGradingLoading] = useState(false);
 
   // Levels state
   const [levelsList, setLevelsList] = useState<any[]>([]);
@@ -296,7 +439,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
         fetchTasks(),
         fetchSubmissions(),
         fetchJobs(),
-        fetchJobSubmissions()
+        fetchJobSubmissions(),
+        fetchQuests(),
+        fetchQuestParticipants()
       ]);
       onShowToast("Dashboard data refreshed!", "success");
     } catch (err: any) {
@@ -614,6 +759,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     }
   };
 
+  const fetchQuests = async () => {
+    const { data, error } = await supabase
+      .from("quests")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching quests:", error);
+      return;
+    }
+    if (data) {
+      setQuestsList(data);
+    }
+  };
+
+  const fetchQuestParticipants = async () => {
+    const { data, error } = await supabase
+      .from("quest_participants")
+      .select("*")
+      .order("joined_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching quest participants:", error);
+      return;
+    }
+    if (data) {
+      setQuestParticipants(data);
+    }
+  };
+
   // Real-time listeners
   useEffect(() => {
     fetchUsers();
@@ -622,6 +797,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     fetchJobs();
     fetchJobSubmissions();
     fetchLevels();
+    fetchQuests();
+    fetchQuestParticipants();
 
     // Subscribe to public database changes in Supabase
     const usersChannel = supabase
@@ -663,6 +840,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       .on("postgres_changes", { event: "*", schema: "public", table: "levels" }, fetchLevels)
       .subscribe();
 
+    const questsChannel = supabase
+      .channel("quests-all")
+      .on("postgres_changes", { event: "*", schema: "public", table: "quests" }, fetchQuests)
+      .subscribe();
+
+    const questParticipantsChannel = supabase
+      .channel("quest-participants-all")
+      .on("postgres_changes", { event: "*", schema: "public", table: "quest_participants" }, () => {
+        fetchQuestParticipants();
+        fetchUsers();
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(usersChannel);
       supabase.removeChannel(tasksChannel);
@@ -670,6 +860,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       supabase.removeChannel(jobsChannel);
       supabase.removeChannel(jobSubmissionsChannel);
       supabase.removeChannel(levelsChannel);
+      supabase.removeChannel(questsChannel);
+      supabase.removeChannel(questParticipantsChannel);
     };
   }, []);
 
@@ -726,6 +918,164 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       onShowToast(err.message || "Failed to publish task.", "error");
     }
   };
+
+  // Quest Handlers
+  const resetQuestFields = () => {
+    setEditingQuest(null);
+    setQuestTitle("");
+    setQuestDescription("");
+    setQuestCategory("weekly");
+    setQuestStartTime("");
+    setQuestEndTime("");
+    setQuestMinExp("0");
+    setQuestMinXp("0");
+    setQuestQuestions([]);
+    setQuestStep(1);
+
+  };
+
+  const handleCreateQuest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!questTitle.trim() || !questDescription.trim() || !questStartTime || !questEndTime) {
+      onShowToast("Quest title, description, start time, and end time are required.", "error");
+      return;
+    }
+
+    const minExpVal = parseInt(questMinExp, 10) || 0;
+    const minXpVal = parseInt(questMinXp, 10) || 0;
+
+    if (questQuestions.length === 0) {
+      onShowToast("Please add at least one question to the quest.", "error");
+      return;
+    }
+
+    setQuestCreating(true);
+    try {
+      const payload = {
+        title: questTitle.trim(),
+        description: questDescription.trim(),
+        category: questCategory,
+        min_exp: minExpVal,
+        min_xp: minXpVal,
+        start_time: new Date(questStartTime).toISOString(),
+        end_time: new Date(questEndTime).toISOString(),
+        quest_data: questQuestions,
+        created_by_id: currentUser.uid,
+      };
+
+      if (editingQuest) {
+        const { error } = await supabase
+          .from("quests")
+          .update(payload)
+          .eq("id", editingQuest.id);
+        if (error) throw error;
+        onShowToast("Quest updated successfully!", "success");
+      } else {
+        const { error } = await supabase
+          .from("quests")
+          .insert({
+            ...payload,
+            created_at: new Date().toISOString(),
+          });
+        if (error) throw error;
+        onShowToast("Quest created successfully!", "success");
+      }
+
+      setIsQuestModalOpen(false);
+      resetQuestFields();
+      fetchQuests();
+    } catch (err: any) {
+      console.error("Error saving quest:", err);
+      onShowToast(err.message || "Failed to save quest.", "error");
+    } finally {
+      setQuestCreating(false);
+    }
+  };
+
+  const handleDeleteQuest = async (questId: string) => {
+    if (!window.confirm("Are you sure you want to delete this quest? This will permanently delete all associated participant records and submissions.")) return;
+    try {
+      const { error } = await supabase.from("quests").delete().eq("id", questId);
+      if (error) throw error;
+      onShowToast("Quest deleted successfully!", "success");
+      fetchQuests();
+    } catch (err: any) {
+      console.error("Error deleting quest:", err);
+      onShowToast(err.message || "Failed to delete quest.", "error");
+    }
+  };
+
+  const fetchQuestGradingParticipants = async (questId: string) => {
+    setQuestGradingLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("quest_participants")
+        .select(`
+          *,
+          users:user_id (uid, name, username, email)
+        `)
+        .eq("quest_id", questId);
+      
+      if (error) throw error;
+      setQuestGradingParticipants(data || []);
+    } catch (err: any) {
+      console.error("Error fetching quest grading participants:", err);
+      onShowToast("Failed to load participants.", "error");
+    } finally {
+      setQuestGradingLoading(false);
+    }
+  };
+
+  const handleGradeQuestParticipant = async (participantId: string, userId: string, score: number, xpEarned: number, expEarned: number, status: "completed" | "failed") => {
+    try {
+      const { error: partError } = await supabase
+        .from("quest_participants")
+        .update({
+          status,
+          score,
+          xp_earned: xpEarned,
+          exp_earned: expEarned,
+          reviewed_at: new Date().toISOString()
+        })
+        .eq("id", participantId);
+
+      if (partError) throw partError;
+
+      const { data: userData, error: userFetchErr } = await supabase
+        .from("users")
+        .select("xp, exp")
+        .eq("uid", userId)
+        .maybeSingle();
+
+      if (userFetchErr) throw userFetchErr;
+
+      const currentXp = userData?.xp || 0;
+      const currentExp = userData?.exp || 0;
+
+      const { error: userUpdateErr } = await supabase
+        .from("users")
+        .update({
+          xp: currentXp + xpEarned,
+          exp: currentExp + expEarned
+        })
+        .eq("uid", userId);
+
+      if (userUpdateErr) throw userUpdateErr;
+
+      onShowToast("Submission graded and rewards distributed successfully!", "success");
+      
+      if (selectedQuestForGrading) {
+        fetchQuestGradingParticipants(selectedQuestForGrading.id);
+      }
+      fetchQuestParticipants();
+      fetchUsers();
+    } catch (err: any) {
+      console.error("Error grading participant:", err);
+      onShowToast(err.message || "Failed to grade submission.", "error");
+    }
+  };
+
+
 
   // Create or Update User Handler
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -1924,6 +2274,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
               </svg>
               Leaderboard
             </button>
+            <button
+              className={`sidebar-nav-item ${activeTab === "quests" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("quests");
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+              Quests
+            </button>
 
           </div>
 
@@ -2941,6 +3303,136 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                       );
                     })}
                   </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === "quests" && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div className="dashboard-view-title" style={{ marginBottom: 0 }}>Quests Management</div>
+                <button className="btn btn-primary" onClick={() => {
+                  resetQuestFields();
+                  setIsQuestModalOpen(true);
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '0.5rem' }}>
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  New Quest
+                </button>
+              </div>
+              <p className="dashboard-view-desc">Create gamified tasks, questionnaires, jobs, and grade user submissions.</p>
+
+              {questsList.length === 0 ? (
+                <div className="empty-placeholder">No quests created yet. Click "New Quest" to build one!</div>
+              ) : (
+                <div className="user-table-wrapper" style={{ marginTop: '1.25rem' }}>
+                  <table className="user-table">
+                    <thead>
+                      <tr>
+                        <th>Title</th>
+                        <th>Category</th>
+                        <th>Requirements</th>
+                        <th>Schedule</th>
+                        <th>Status</th>
+                        <th>Participation</th>
+                        <th style={{ textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {questsList.map((quest) => {
+                        const now = new Date();
+                        const start = new Date(quest.start_time);
+                        const end = new Date(quest.end_time);
+                        let statusText = "Active";
+                        let statusClass = "active";
+                        if (now < start) {
+                          statusText = "Scheduled";
+                          statusClass = "pending";
+                        } else if (now > end) {
+                          statusText = "Expired";
+                          statusClass = "expired";
+                        }
+
+                        const participants = questParticipants.filter(p => p.quest_id === quest.id);
+                        const totalJoined = participants.length;
+                        const pendingGrading = participants.filter(p => p.status === "submitted").length;
+
+                        return (
+                          <tr key={quest.id}>
+                            <td>
+                              <strong>{quest.title}</strong>
+                            </td>
+                            <td>
+                              <span className="brand-badge" style={{ textTransform: 'capitalize' }}>{quest.category}</span>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                <span style={{ color: 'var(--primary-hover)' }}>{quest.min_exp} EXP</span> / <span style={{ color: 'var(--accent-gold)' }}>{quest.min_xp} XP</span>
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                {start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                <div style={{ fontSize: '0.65rem' }}>to {end.toLocaleDateString()} {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                              </div>
+                            </td>
+                            <td>
+                              <span className={`status-capsule ${statusClass}`}>
+                                {statusText}
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                  setSelectedQuestForGrading(quest);
+                                  setIsQuestGradingModalOpen(true);
+                                  fetchQuestGradingParticipants(quest.id);
+                                }}
+                              >
+                                Grade ({pendingGrading} Pnd / {totalJoined} Tot)
+                              </button>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                <button
+                                  type="button"
+                                  className="action-icon-btn edit-btn"
+                                  title="Edit Quest"
+                                  onClick={() => {
+                                    setEditingQuest(quest);
+                                    setQuestTitle(quest.title);
+                                    setQuestDescription(quest.description);
+                                    setQuestCategory(quest.category);
+                                    setQuestStartTime(quest.start_time.substring(0, 16));
+                                    setQuestEndTime(quest.end_time.substring(0, 16));
+                                    setQuestMinExp(String(quest.min_exp));
+                                    setQuestMinXp(String(quest.min_xp));
+                                    setQuestQuestions(quest.quest_data || []);
+                                    setQuestStep(1);
+                                    setIsQuestModalOpen(true);
+                                  }}
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="action-icon-btn"
+                                  title="Delete Quest"
+                                  style={{ color: 'var(--danger)' }}
+                                  onClick={() => handleDeleteQuest(quest.id)}
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </>
@@ -4675,6 +5167,304 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           </div>
         </>,
         document.body
+      )}
+
+      {/* Quest Creation/Edit Stepper Modal */}
+      {isQuestModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsQuestModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '620px' }}>
+            <div className="modal-header">
+              <div className="modal-title">{editingQuest ? "Edit Quest" : "Create Quest"}</div>
+              <button type="button" className="modal-close-btn" onClick={() => setIsQuestModalOpen(false)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {/* Stepper Header */}
+            <div className="stepper-container" style={{ marginTop: '1.5rem' }}>
+              <div className="stepper-line-bg"></div>
+              <div className="stepper-line-active" style={{ width: `${((questStep - 1) / 2) * 100}%` }}></div>
+              <div className={`stepper-step ${questStep === 1 ? "active" : ""} ${questStep > 1 ? "completed" : ""}`}>
+                <div className="stepper-circle">1</div>
+                <div className="stepper-label">Details</div>
+              </div>
+              <div className={`stepper-step ${questStep === 2 ? "active" : ""} ${questStep > 2 ? "completed" : ""}`}>
+                <div className="stepper-circle">2</div>
+                <div className="stepper-label">Requirements</div>
+              </div>
+              <div className={`stepper-step ${questStep === 3 ? "active" : ""}`}>
+                <div className="stepper-circle">3</div>
+                <div className="stepper-label">Builder</div>
+              </div>
+            </div>
+
+            <div className="modal-body" style={{ paddingTop: '0.5rem' }}>
+              <form onSubmit={handleCreateQuest}>
+                {questStep === 1 && (
+                  <div className="stepper-content-body" style={{ minHeight: '280px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label className="form-label">Quest Title</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Master SQL & Database Optimization"
+                        value={questTitle}
+                        onChange={(e) => setQuestTitle(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Description & Instructions</label>
+                      <textarea
+                        className="form-control"
+                        placeholder="Describe what users need to do in this quest..."
+                        rows={4}
+                        value={questDescription}
+                        onChange={(e) => setQuestDescription(e.target.value)}
+                        required
+                        style={{ resize: 'none' }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Category</label>
+                      <select
+                        className="form-control"
+                        value={questCategory}
+                        onChange={(e: any) => setQuestCategory(e.target.value)}
+                      >
+                        <option value="weekly">Weekly Quest</option>
+                        <option value="monthly">Monthly Quest</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div className="form-group">
+                        <label className="form-label">Start Date & Time</label>
+                        <input
+                          type="datetime-local"
+                          className="form-control"
+                          value={questStartTime}
+                          onChange={(e) => setQuestStartTime(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">End Date & Time</label>
+                        <input
+                          type="datetime-local"
+                          className="form-control"
+                          value={questEndTime}
+                          onChange={(e) => setQuestEndTime(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {questStep === 2 && (
+                  <div className="stepper-content-body" style={{ minHeight: '280px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div className="form-group">
+                      <label className="form-label">Minimum EXP Required</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={questMinExp}
+                        onChange={(e) => setQuestMinExp(e.target.value)}
+                        min={0}
+                        required
+                      />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                        Users must have at least this much Task Balance (EXP) to unlock and join the quest.
+                      </span>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Minimum XP Required</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={questMinXp}
+                        onChange={(e) => setQuestMinXp(e.target.value)}
+                        min={0}
+                        required
+                      />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                        Users must have at least this much Leveling points (XP) to unlock and join the quest.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {questStep === 3 && (
+                  <div className="stepper-content-body" style={{ minHeight: '280px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '1rem', background: 'var(--bg-surface-hover)' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Add Quest Question / Task</div>
+                      
+                      <QuestQuestionBuilderForm
+                        onAdd={(newQ) => {
+                          setQuestQuestions(prev => [...prev, newQ]);
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ flex: 1, maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-sm)', padding: '0.5rem' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Quest Question List ({questQuestions.length})</div>
+                      {questQuestions.length === 0 ? (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>No questions added. Add at least one above.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {questQuestions.map((q, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-base)', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', fontSize: '0.75rem' }}>
+                              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
+                                <span style={{ color: 'var(--primary-hover)', fontWeight: 600, marginRight: '0.25rem' }}>[{q.type.toUpperCase()}]</span>
+                                {q.question}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span style={{ color: 'var(--accent-gold)' }}>+{q.xp_reward} XP</span>
+                                <span style={{ color: 'var(--primary-hover)' }}>+{q.exp_reward} EXP</span>
+                                <button
+                                  type="button"
+                                  style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.85rem' }}
+                                  onClick={() => setQuestQuestions(prev => prev.filter((_, i) => i !== idx))}
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      if (questStep > 1) {
+                        setQuestStep(prev => prev - 1);
+                      } else {
+                        setIsQuestModalOpen(false);
+                      }
+                    }}
+                  >
+                    {questStep === 1 ? "Cancel" : "Back"}
+                  </button>
+                  
+                  {questStep < 3 ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => setQuestStep(prev => prev + 1)}
+                    >
+                      Next
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={questCreating || questQuestions.length === 0}
+                    >
+                      {questCreating ? "Saving..." : editingQuest ? "Save Changes" : "Create Quest"}
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quest Grading Modal */}
+      {isQuestGradingModalOpen && selectedQuestForGrading && (
+        <div className="modal-overlay" onClick={() => setIsQuestGradingModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '750px', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <div className="modal-title">Grade Quest: {selectedQuestForGrading.title}</div>
+              <button type="button" className="modal-close-btn" onClick={() => setIsQuestGradingModalOpen(false)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: '1rem' }}>
+              {questGradingLoading ? (
+                <div style={{ textAlign: 'center', padding: '2rem' }}>Loading participants...</div>
+              ) : questGradingParticipants.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No participants have joined or submitted this quest yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {questGradingParticipants.map((part) => {
+                    const user = part.users || {};
+                    const isSubmitted = part.status === "submitted";
+                    const isGraded = part.status === "completed" || part.status === "failed";
+                    const questQuestionsList = selectedQuestForGrading.quest_data || [];
+                    const userAnswers = part.submission?.answers || [];
+
+                    return (
+                      <div key={part.id} style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '1rem', background: 'var(--bg-surface)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>
+                          <div>
+                            <strong>{user.name || "Unknown User"}</strong>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>@{user.username || "unknown"}</span>
+                          </div>
+                          <span className={`status-capsule ${part.status === 'submitted' ? 'pending' : part.status === 'completed' ? 'active' : 'expired'}`} style={{ textTransform: 'capitalize' }}>
+                            {part.status}
+                          </span>
+                        </div>
+
+                        {/* Display answers */}
+                        {isSubmitted || isGraded ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+                            {questQuestionsList.map((q: any, idx: number) => {
+                              const ans = userAnswers[idx];
+                              return (
+                                <div key={idx} style={{ fontSize: '0.8rem', background: 'var(--bg-base)', padding: '0.5rem', borderRadius: '4px' }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Q{idx + 1}: {q.question}</div>
+                                  <div style={{ marginTop: '0.25rem', color: 'var(--text-primary)', wordBreak: 'break-all' }}>
+                                    <strong>Submitted Answer:</strong> {ans !== undefined ? String(ans) : <span style={{ color: 'var(--text-muted)' }}>None</span>}
+                                  </div>
+                                  {q.type === "mcq" && (
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                      Correct Answer: {q.answer}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                            User joined but has not submitted the quest yet.
+                          </div>
+                        )}
+
+                        {isSubmitted && (
+                          <QuestParticipantGradingAction
+                            maxScore={questQuestionsList.length * 10}
+                            defaultXp={questQuestionsList.reduce((acc: number, q: any) => acc + (q.xp_reward || 0), 0)}
+                            defaultExp={questQuestionsList.reduce((acc: number, q: any) => acc + (q.exp_reward || 0), 0)}
+                            onGrade={(score, xp, exp, success) => {
+                              handleGradeQuestParticipant(part.id, part.user_id, score, xp, exp, success ? "completed" : "failed");
+                            }}
+                          />
+                        )}
+
+                        {isGraded && (
+                          <div style={{ fontSize: '0.75rem', background: 'var(--bg-surface-elevated)', padding: '0.5rem', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                            <span>Score: {part.score}</span>
+                            <span>Rewarded: {part.xp_earned} XP / {part.exp_earned} EXP</span>
+                            <span>Reviewed on: {new Date(part.reviewed_at).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

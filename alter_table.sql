@@ -246,3 +246,71 @@ CREATE POLICY "Enable delete access for all levels" ON public.levels FOR DELETE 
 -- Enable Realtime for levels
 ALTER PUBLICATION supabase_realtime ADD TABLE public.levels;
 
+-- ==========================================
+-- 10. Quests Schema Configuration
+-- ==========================================
+
+-- Create quests table
+CREATE TABLE IF NOT EXISTS public.quests (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text not null,
+  category text not null, -- 'weekly', 'monthly'
+  min_exp integer not null default 0,
+  min_xp integer not null default 0,
+  start_time timestamp with time zone not null,
+  end_time timestamp with time zone not null,
+  quest_data jsonb not null default '[]'::jsonb,
+  created_by_id text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create quest_participants table
+CREATE TABLE IF NOT EXISTS public.quest_participants (
+  id uuid primary key default gen_random_uuid(),
+  quest_id uuid not null references public.quests(id) on delete cascade,
+  user_id text not null references public.users(uid) on delete cascade,
+  joined_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  submission jsonb default null,
+  status text not null default 'joined', -- 'joined', 'submitted', 'completed', 'failed'
+  score integer not null default 0,
+  xp_earned integer not null default 0,
+  exp_earned integer not null default 0,
+  reviewed_at timestamp with time zone default null,
+  CONSTRAINT unique_quest_user UNIQUE (quest_id, user_id)
+);
+
+-- Enable RLS for quests
+ALTER TABLE public.quests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quest_participants ENABLE ROW LEVEL SECURITY;
+
+-- Policies for quests
+DROP POLICY IF EXISTS "Enable read access for all quests" ON public.quests;
+CREATE POLICY "Enable read access for all quests" ON public.quests FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Enable insert access for all quests" ON public.quests;
+CREATE POLICY "Enable insert access for all quests" ON public.quests FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Enable update access for all quests" ON public.quests;
+CREATE POLICY "Enable update access for all quests" ON public.quests FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Enable delete access for all quests" ON public.quests;
+CREATE POLICY "Enable delete access for all quests" ON public.quests FOR DELETE USING (true);
+
+-- Policies for quest_participants
+DROP POLICY IF EXISTS "Enable read access for all quest_participants" ON public.quest_participants;
+CREATE POLICY "Enable read access for all quest_participants" ON public.quest_participants FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Enable insert access for all quest_participants" ON public.quest_participants;
+CREATE POLICY "Enable insert access for all quest_participants" ON public.quest_participants FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Enable update access for all quest_participants" ON public.quest_participants;
+CREATE POLICY "Enable update access for all quest_participants" ON public.quest_participants FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Enable delete access for all quest_participants" ON public.quest_participants;
+CREATE POLICY "Enable delete access for all quest_participants" ON public.quest_participants FOR DELETE USING (true);
+
+-- Enable Realtime for quests
+ALTER PUBLICATION supabase_realtime ADD TABLE public.quests;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.quest_participants;
+
