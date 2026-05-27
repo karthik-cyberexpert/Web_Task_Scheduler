@@ -1099,13 +1099,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
         if (activeUsers) {
           const now = new Date();
+          let hasSuspended = false;
           assignedUserIds = activeUsers
             .filter((u) => {
               const isBanned = u.is_banned === true;
               const isSuspended = u.suspended_until && new Date(u.suspended_until) > now;
+              if (isSuspended) hasSuspended = true;
               return !isBanned && !isSuspended;
             })
             .map((u) => u.uid);
+
+          if (hasSuspended && currentUser?.uid) {
+            assignedUserIds.push(currentUser.uid);
+          }
         }
       } else {
         assignedUserIds = selectedJobUserIds;
@@ -1352,13 +1358,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
         if (activeUsers) {
           const now = new Date();
+          let hasSuspended = false;
           assignedUserIds = activeUsers
             .filter((u) => {
               const isBanned = u.is_banned === true;
               const isSuspended = u.suspended_until && new Date(u.suspended_until) > now;
+              if (isSuspended) hasSuspended = true;
               return !isBanned && !isSuspended;
             })
             .map((u) => u.uid);
+
+          if (hasSuspended && currentUser?.uid) {
+            assignedUserIds.push(currentUser.uid);
+          }
         }
       } else {
         assignedUserIds = selectedUserIds;
