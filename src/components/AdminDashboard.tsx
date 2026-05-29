@@ -133,7 +133,7 @@ const renderSubmissionContent = (content: string) => {
               <div style={{ marginTop: "4px" }}>
                 <a href={parsed.upload} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.35rem 0.75rem", textDecoration: "none", fontSize: "0.8rem" }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: "block" }}>
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
                   </svg>
                   Download File
                 </a>
@@ -284,7 +284,7 @@ const QuestQuestionBuilderForm: React.FC<{ onAdd: (q: any) => void }> = ({ onAdd
   const handleAdd = () => {
     if (!question.trim()) return;
     const optArr = type === "mcq" ? options.split(",").map(o => o.trim()).filter(Boolean) : [];
-    
+
     onAdd({
       type,
       question: question.trim(),
@@ -302,11 +302,36 @@ const QuestQuestionBuilderForm: React.FC<{ onAdd: (q: any) => void }> = ({ onAdd
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+    <div style={{
+      background: 'var(--bg-surface, #1e2235)',
+      border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+      borderRadius: '12px',
+      padding: '1.5rem',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '1.25rem',
+      boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
+      transition: 'all 0.3s ease'
+    }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
         <div>
-          <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Type</label>
-          <select className="form-control" value={type} onChange={(e: any) => setType(e.target.value)} style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Type</label>
+          <select
+            className="form-control"
+            value={type}
+            onChange={(e: any) => setType(e.target.value)}
+            style={{
+              padding: '0.6rem 0.75rem',
+              height: 'auto',
+              fontSize: '0.85rem',
+              borderRadius: '8px',
+              backgroundColor: 'var(--bg-base, #121420)',
+              borderColor: 'var(--border-color)',
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              transition: 'border-color 0.2s'
+            }}
+          >
             <option value="mcq">MCQ Choice</option>
             <option value="text">Short/Long Text Response</option>
             <option value="link">Resource Link Submission</option>
@@ -314,35 +339,147 @@ const QuestQuestionBuilderForm: React.FC<{ onAdd: (q: any) => void }> = ({ onAdd
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Question/Prompt</label>
-          <input type="text" className="form-control" value={question} onChange={e => setQuestion(e.target.value)} placeholder="Enter prompt..." style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Question / Prompt</label>
+          <input
+            type="text"
+            className="form-control"
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            placeholder="Enter the quest task or question prompt..."
+            style={{
+              padding: '0.6rem 0.75rem',
+              height: 'auto',
+              fontSize: '0.85rem',
+              borderRadius: '8px',
+              backgroundColor: 'var(--bg-base, #121420)',
+              borderColor: 'var(--border-color)',
+              color: 'var(--text-primary)',
+              transition: 'border-color 0.2s'
+            }}
+          />
         </div>
       </div>
 
       {type === "mcq" && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '2fr 1fr',
+          gap: '1rem',
+          background: 'rgba(255, 255, 255, 0.02)',
+          padding: '1rem',
+          borderRadius: '8px',
+          border: '1px dashed var(--border-color)'
+        }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Options (comma-separated)</label>
-            <input type="text" className="form-control" value={options} onChange={e => setOptions(e.target.value)} placeholder="e.g. A, B, C, D" style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Options (comma-separated)</label>
+            <input
+              type="text"
+              className="form-control"
+              value={options}
+              onChange={e => setOptions(e.target.value)}
+              placeholder="e.g. Option A, Option B, Option C, Option D"
+              style={{
+                padding: '0.6rem 0.75rem',
+                height: 'auto',
+                fontSize: '0.85rem',
+                borderRadius: '8px',
+                backgroundColor: 'var(--bg-base, #121420)',
+                borderColor: 'var(--border-color)',
+                color: 'var(--text-primary)'
+              }}
+            />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Correct Answer</label>
-            <input type="text" className="form-control" value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Matches one option" style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Correct Answer</label>
+            <input
+              type="text"
+              className="form-control"
+              value={answer}
+              onChange={e => setAnswer(e.target.value)}
+              placeholder="Matches one option"
+              style={{
+                padding: '0.6rem 0.75rem',
+                height: 'auto',
+                fontSize: '0.85rem',
+                borderRadius: '8px',
+                backgroundColor: 'var(--bg-base, #121420)',
+                borderColor: 'var(--border-color)',
+                color: 'var(--text-primary)'
+              }}
+            />
           </div>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'end' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '1rem', alignItems: 'end', marginTop: '0.25rem' }}>
         <div>
-          <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>XP Reward</label>
-          <input type="number" className="form-control" value={xp} onChange={e => setXp(e.target.value)} min={0} style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-gold)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>XP Reward</label>
+          <input
+            type="number"
+            className="form-control"
+            value={xp}
+            onChange={e => setXp(e.target.value)}
+            min={0}
+            style={{
+              padding: '0.6rem 0.75rem',
+              height: 'auto',
+              fontSize: '0.85rem',
+              borderRadius: '8px',
+              backgroundColor: 'var(--bg-base, #121420)',
+              borderColor: 'var(--border-color)',
+              color: 'var(--text-primary)'
+            }}
+          />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>EXP Reward</label>
-          <input type="number" className="form-control" value={exp} onChange={e => setExp(e.target.value)} min={0} style={{ padding: '0.25rem', height: 'auto', fontSize: '0.75rem' }} />
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--primary-hover)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>EXP Reward</label>
+          <input
+            type="number"
+            className="form-control"
+            value={exp}
+            onChange={e => setExp(e.target.value)}
+            min={0}
+            style={{
+              padding: '0.6rem 0.75rem',
+              height: 'auto',
+              fontSize: '0.85rem',
+              borderRadius: '8px',
+              backgroundColor: 'var(--bg-base, #121420)',
+              borderColor: 'var(--border-color)',
+              color: 'var(--text-primary)'
+            }}
+          />
         </div>
-        <button type="button" className="btn btn-primary" onClick={handleAdd} style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', height: 'fit-content' }}>
-          Add
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={handleAdd}
+          style={{
+            padding: '0.6rem 1.25rem',
+            fontSize: '0.85rem',
+            height: '40px',
+            borderRadius: '8px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            fontWeight: '600',
+            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)',
+            transition: 'transform 0.15s, box-shadow 0.15s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = '0 6px 16px rgba(99, 102, 241, 0.35)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.25)';
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Add Question
         </button>
       </div>
     </div>
@@ -353,8 +490,9 @@ const QuestParticipantGradingAction: React.FC<{
   maxScore: number;
   defaultXp: number;
   defaultExp: number;
+  onlyAccept?: boolean;
   onGrade: (score: number, xp: number, exp: number, success: boolean) => void;
-}> = ({ maxScore, defaultXp, defaultExp, onGrade }) => {
+}> = ({ maxScore, defaultXp, defaultExp, onlyAccept, onGrade }) => {
   const [score, setScore] = useState(String(maxScore));
   const [xp, setXp] = useState(String(defaultXp));
   const [exp, setExp] = useState(String(defaultExp));
@@ -380,19 +518,58 @@ const QuestParticipantGradingAction: React.FC<{
           style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
           onClick={() => onGrade(parseInt(score, 10) || 0, parseInt(xp, 10) || 0, parseInt(exp, 10) || 0, true)}
         >
-          Approve
+          Accept
         </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', color: 'var(--danger)' }}
-          onClick={() => onGrade(0, 0, 0, false)}
-        >
-          Fail
-        </button>
+        {!onlyAccept && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+            onClick={() => onGrade(0, 0, 0, false)}
+          >
+            Fail
+          </button>
+        )}
       </div>
     </div>
   );
+};
+
+const validateUploadedQuestion = (q: any) => {
+  const errors: string[] = [];
+  const validTypes = ["mcq", "text", "link", "upload"];
+
+  if (!q.question || typeof q.question !== "string" || !q.question.trim()) {
+    errors.push("Missing question prompt");
+  }
+  if (!q.type || !validTypes.includes(q.type)) {
+    errors.push(`Invalid type (must be: ${validTypes.join(", ")})`);
+  }
+  if (q.type === "mcq") {
+    if (!q.options || !Array.isArray(q.options) || q.options.filter(Boolean).length === 0) {
+      errors.push("MCQ options array is empty/missing");
+    }
+    if (!q.answer || typeof q.answer !== "string" || !q.answer.trim()) {
+      errors.push("MCQ missing correct answer");
+    } else if (q.options && Array.isArray(q.options) && !q.options.map((o: any) => String(o).trim().toLowerCase()).includes(String(q.answer).trim().toLowerCase())) {
+      errors.push("Correct answer must match one of options");
+    }
+  }
+
+  const xpReward = parseInt(q.xp_reward, 10);
+  if (isNaN(xpReward) || xpReward < 0) {
+    errors.push("Invalid XP Reward value");
+  }
+
+  const expReward = parseInt(q.exp_reward, 10);
+  if (isNaN(expReward) || expReward < 0) {
+    errors.push("Invalid EXP Reward value");
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
 };
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, currentUser, onBackToUser }) => {
@@ -414,10 +591,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const [questQuestions, setQuestQuestions] = useState<any[]>([]);
   const [questStep, setQuestStep] = useState(1);
   const [questCreating, setQuestCreating] = useState(false);
+  const [bulkUploadedQuestions, setBulkUploadedQuestions] = useState<any[]>([]);
+  const [selectedBulkQuestionIndices, setSelectedBulkQuestionIndices] = useState<number[]>([]);
+  const [bulkSearchQuery, setBulkSearchQuery] = useState("");
+  const [showBulkPreview, setShowBulkPreview] = useState(false);
+  const [isManualQuestionFormOpen, setIsManualQuestionFormOpen] = useState(false);
+
+  const downloadTemplate = (type: "mcq" | "text" | "link" | "upload") => {
+    let templateData: any[] = [];
+    if (type === "mcq") {
+      templateData = [
+        {
+          type: "mcq",
+          question: "Sample MCQ Question prompt?",
+          options: ["Option A", "Option B", "Option C", "Option D"],
+          answer: "Option A",
+          xp_reward: 10,
+          exp_reward: 50
+        }
+      ];
+    } else if (type === "text") {
+      templateData = [
+        {
+          type: "text",
+          question: "Sample Short/Long Text description or prompt?",
+          xp_reward: 15,
+          exp_reward: 75
+        }
+      ];
+    } else if (type === "link") {
+      templateData = [
+        {
+          type: "link",
+          question: "Sample Link Submission request prompt?",
+          xp_reward: 10,
+          exp_reward: 50
+        }
+      ];
+    } else if (type === "upload") {
+      templateData = [
+        {
+          type: "upload",
+          question: "Sample File Attachment request prompt?",
+          xp_reward: 20,
+          exp_reward: 100
+        }
+      ];
+    }
+
+    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+      JSON.stringify(templateData, null, 2)
+    )}`;
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", jsonString);
+    downloadAnchor.setAttribute("download", `quest_template_${type}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        if (!Array.isArray(parsed)) {
+          onShowToast("JSON must be an array of question tasks.", "error");
+          return;
+        }
+
+        const validated = parsed.map((item: any, index: number) => {
+          const validation = validateUploadedQuestion(item);
+          return {
+            ...item,
+            originalIndex: index,
+            isValid: validation.isValid,
+            errors: validation.errors
+          };
+        });
+
+        setBulkUploadedQuestions(validated);
+        setSelectedBulkQuestionIndices(validated.filter(q => q.isValid).map(q => q.originalIndex));
+        setShowBulkPreview(true);
+        onShowToast(`Parsed ${validated.length} tasks successfully! Please verify in the preview list below.`, "success");
+      } catch (err) {
+        onShowToast("Failed to parse JSON file. Make sure it is valid JSON.", "error");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ""; // clear input
+  };
 
   const [selectedQuestForGrading, setSelectedQuestForGrading] = useState<any>(null);
   const [isQuestGradingModalOpen, setIsQuestGradingModalOpen] = useState(false);
   const [questGradingParticipants, setQuestGradingParticipants] = useState<any[]>([]);
+  const [expandedGradingUsers, setExpandedGradingUsers] = useState<Record<string, boolean>>({});
+  const [expandedGradingCategories, setExpandedGradingCategories] = useState<Record<string, boolean>>({});
   const [questGradingLoading, setQuestGradingLoading] = useState(false);
 
   // Levels state
@@ -482,6 +754,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const [suspendHours, setSuspendHours] = useState("0");
   const [suspendMinutes, setSuspendMinutes] = useState("0");
   const [newUserRole, setNewUserRole] = useState<"user" | "admin">("user");
+  const [newUserExp, setNewUserExp] = useState(0);
+  const [newUserXp, setNewUserXp] = useState(0);
+  const [showEditExp, setShowEditExp] = useState(false);
+  const [showEditXp, setShowEditXp] = useState(false);
 
   // Jobs states
   const [jobsList, setJobsList] = useState<any[]>([]);
@@ -528,6 +804,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const [calendarHour, setCalendarHour] = useState("00");
   const [calendarMinute, setCalendarMinute] = useState("00");
   const [isCalendarPopupOpen, setIsCalendarPopupOpen] = useState(false);
+  const [calendarTarget, setCalendarTarget] = useState<"task" | "questStart" | "questEnd">("task");
+
+  const openCalendarForTarget = (target: "task" | "questStart" | "questEnd", currentVal: string) => {
+    setCalendarTarget(target);
+    if (currentVal) {
+      const parsedDate = new Date(currentVal);
+      if (!isNaN(parsedDate.getTime())) {
+        setSelectedCalendarDate(parsedDate);
+        setCalendarHour(String(parsedDate.getHours()).padStart(2, '0'));
+        setCalendarMinute(String(parsedDate.getMinutes()).padStart(2, '0'));
+        setCurrentCalendarMonth(parsedDate.getMonth());
+        setCurrentCalendarYear(parsedDate.getFullYear());
+      } else {
+        setSelectedCalendarDate(null);
+        setCalendarHour("00");
+        setCalendarMinute("00");
+      }
+    } else {
+      setSelectedCalendarDate(null);
+      setCalendarHour("00");
+      setCalendarMinute("00");
+    }
+    setIsCalendarPopupOpen(true);
+  };
 
   // Calendar helper functions
   const getDaysInMonth = (month: number, year: number) => {
@@ -573,19 +873,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     let minNum = parseInt(min, 10);
     if (isNaN(minNum) || minNum < 0) minNum = 0;
     if (minNum > 59) minNum = 59;
-    
+
     finalDate.setHours(hourNum);
     finalDate.setMinutes(minNum);
     finalDate.setSeconds(0);
     finalDate.setMilliseconds(0);
-    
+
     const year = finalDate.getFullYear();
     const month = String(finalDate.getMonth() + 1).padStart(2, "0");
     const day = String(finalDate.getDate()).padStart(2, "0");
     const hoursStr = String(finalDate.getHours()).padStart(2, "0");
     const minutesStr = String(finalDate.getMinutes()).padStart(2, "0");
-    
-    setTaskDeadline(`${year}-${month}-${day}T${hoursStr}:${minutesStr}`);
+
+    const formattedVal = `${year}-${month}-${day}T${hoursStr}:${minutesStr}`;
+    if (calendarTarget === "task") {
+      setTaskDeadline(formattedVal);
+    } else if (calendarTarget === "questStart") {
+      setQuestStartTime(formattedVal);
+    } else if (calendarTarget === "questEnd") {
+      setQuestEndTime(formattedVal);
+    }
   };
 
   const renderCalendarDays = () => {
@@ -604,13 +911,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     // Days in the month
     for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
       const cellDate = new Date(currentCalendarYear, currentCalendarMonth, dayNum);
-      const isSelected = selectedCalendarDate && 
-        selectedCalendarDate.getDate() === dayNum && 
-        selectedCalendarDate.getMonth() === currentCalendarMonth && 
+      const isSelected = selectedCalendarDate &&
+        selectedCalendarDate.getDate() === dayNum &&
+        selectedCalendarDate.getMonth() === currentCalendarMonth &&
         selectedCalendarDate.getFullYear() === currentCalendarYear;
-      
-      const isToday = today.getDate() === dayNum && 
-        today.getMonth() === currentCalendarMonth && 
+
+      const isToday = today.getDate() === dayNum &&
+        today.getMonth() === currentCalendarMonth &&
         today.getFullYear() === currentCalendarYear;
 
       const isPast = cellDate < today;
@@ -635,15 +942,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             borderRadius: '6px',
             border: 'none',
             cursor: isPast ? 'not-allowed' : 'pointer',
-            backgroundColor: isSelected 
-              ? 'var(--primary)' 
-              : isToday 
-                ? 'var(--bg-surface-hover)' 
+            backgroundColor: isSelected
+              ? 'var(--primary)'
+              : isToday
+                ? 'var(--bg-surface-hover)'
                 : 'transparent',
-            color: isSelected 
-              ? '#fff' 
-              : isPast 
-                ? 'var(--text-muted)' 
+            color: isSelected
+              ? '#fff'
+              : isPast
+                ? 'var(--text-muted)'
                 : 'var(--text-primary)',
             transition: 'all var(--transition-fast)',
             outline: 'none',
@@ -931,7 +1238,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     setQuestMinXp("0");
     setQuestQuestions([]);
     setQuestStep(1);
-
+    setBulkUploadedQuestions([]);
+    setSelectedBulkQuestionIndices([]);
+    setBulkSearchQuery("");
+    setShowBulkPreview(false);
   };
 
   const handleCreateQuest = async (e: React.FormEvent) => {
@@ -1015,7 +1325,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           users:user_id (uid, name, username, email)
         `)
         .eq("quest_id", questId);
-      
+
       if (error) throw error;
       setQuestGradingParticipants(data || []);
     } catch (err: any) {
@@ -1063,7 +1373,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       if (userUpdateErr) throw userUpdateErr;
 
       onShowToast("Submission graded and rewards distributed successfully!", "success");
-      
+
       if (selectedQuestForGrading) {
         fetchQuestGradingParticipants(selectedQuestForGrading.id);
       }
@@ -1081,12 +1391,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const usernameClean = newUserUsername.trim().toLowerCase();
-    
+
     if (!newUserName.trim() || !usernameClean || !newUserEmail.trim()) {
       onShowToast("All fields are required.", "error");
       return;
     }
-    
+
     const usernameRegex = /^[a-zA-Z0-9_-]+$/;
     if (!usernameRegex.test(usernameClean)) {
       onShowToast("Username can only contain letters, numbers, underscores, and dashes.", "error");
@@ -1122,6 +1432,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
             username: usernameClean,
             email: newUserEmail.trim().toLowerCase(),
             role: newUserRole,
+            exp: newUserExp,
+            xp: newUserXp,
           })
           .eq("uid", editingUser.uid);
 
@@ -1208,7 +1520,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
         // Log out of the secondary app instance and clean up
         await authSignOut(secondaryAuth);
-        try { await deleteApp(secondaryApp); } catch (_) {}
+        try { await deleteApp(secondaryApp); } catch (_) { }
         secondaryApp = null;
 
         // Store in Supabase users table (upsert to handle re-registration of previously deleted users)
@@ -1248,6 +1560,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       setNewUserUsername("");
       setNewUserEmail("");
       setNewUserRole("user");
+      setNewUserExp(0);
+      setNewUserXp(0);
+      setShowEditExp(false);
+      setShowEditXp(false);
       setEditingUser(null);
       setIsUserModalOpen(false);
     } catch (err: any) {
@@ -1260,7 +1576,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       if (secondaryApp) {
         try {
           await deleteApp(secondaryApp);
-        } catch (_) {}
+        } catch (_) { }
       }
     } finally {
       setUserCreating(false);
@@ -1273,6 +1589,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     setNewUserUsername(user.username);
     setNewUserEmail(user.email);
     setNewUserRole(user.role);
+    setNewUserExp(user.exp ?? 0);
+    setNewUserXp(user.xp ?? 0);
+    setShowEditExp(false);
+    setShowEditXp(false);
     setIsUserModalOpen(true);
   };
 
@@ -1315,9 +1635,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       if (error) throw error;
 
       onShowToast(
-        isSelf 
-          ? `Your password has been successfully reset to "user@sydions".` 
-          : `Password for @${username} reset to "user@sydions" successfully!`, 
+        isSelf
+          ? `Your password has been successfully reset to "user@sydions".`
+          : `Password for @${username} reset to "user@sydions" successfully!`,
         "success"
       );
     } catch (err: any) {
@@ -1689,18 +2009,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     let minNum = parseInt(min, 10);
     if (isNaN(minNum) || minNum < 0) minNum = 0;
     if (minNum > 59) minNum = 59;
-    
+
     finalDate.setHours(hourNum);
     finalDate.setMinutes(minNum);
     finalDate.setSeconds(0);
     finalDate.setMilliseconds(0);
-    
+
     const year = finalDate.getFullYear();
     const month = String(finalDate.getMonth() + 1).padStart(2, "0");
     const day = String(finalDate.getDate()).padStart(2, "0");
     const hoursStr = String(finalDate.getHours()).padStart(2, "0");
     const minutesStr = String(finalDate.getMinutes()).padStart(2, "0");
-    
+
     setJobDeadline(`${year}-${month}-${day}T${hoursStr}:${minutesStr}`);
   };
 
@@ -1866,7 +2186,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
         .from("tasks")
         .delete()
         .eq("id", taskId);
-      
+
       if (error) throw error;
       onShowToast("Task deleted successfully!", "success");
       fetchTasks();
@@ -1881,19 +2201,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     setEditingTask(task);
     setTaskTitle(task.title);
     setTaskDescription(task.description);
-    
+
     const deadlineDate = new Date(task.deadline.toDate());
     setSelectedCalendarDate(deadlineDate);
     setCalendarHour(String(deadlineDate.getHours()).padStart(2, '0'));
     setCalendarMinute(String(deadlineDate.getMinutes()).padStart(2, '0'));
-    
+
     const year = deadlineDate.getFullYear();
     const month = String(deadlineDate.getMonth() + 1).padStart(2, "0");
     const day = String(deadlineDate.getDate()).padStart(2, "0");
     const hoursStr = String(deadlineDate.getHours()).padStart(2, "0");
     const minutesStr = String(deadlineDate.getMinutes()).padStart(2, "0");
     setTaskDeadline(`${year}-${month}-${day}T${hoursStr}:${minutesStr}`);
-    
+
     setTaskAssignedType(task.assignedType);
     setSelectedUserIds(task.assignedUsers || []);
     setMaxXP(String(task.maxXP));
@@ -1970,7 +2290,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           const currentXp = userData?.xp || 0;
           const { error: userErr } = await supabase
             .from("users")
-            .update({ 
+            .update({
               exp: currentExp + xpAwarded,
               xp: currentXp + levelXpAwarded
             })
@@ -2012,14 +2332,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     );
   };
 
-  const filteredUsers = usersList.filter(user => 
+  const filteredUsers = usersList.filter(user =>
     user.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
     user.username.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(userSearchQuery.toLowerCase())
   );
 
   const allFilteredSelected = filteredUsers.length > 0 && filteredUsers.every(user => selectedUserIds.includes(user.uid));
-  
+
   const handleSelectAllToggle = () => {
     if (allFilteredSelected) {
       const filteredIds = filteredUsers.map(u => u.uid);
@@ -2041,16 +2361,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const openNewTaskModal = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     setCurrentCalendarMonth(tomorrow.getMonth());
     setCurrentCalendarYear(tomorrow.getFullYear());
     setSelectedCalendarDate(null);
-    
+
     setCalendarHour("00");
     setCalendarMinute("00");
-    
+
     setTaskDeadline("");
-    
+
     setTaskTitle("");
     setTaskDescription("");
     setTaskAssignedType("all");
@@ -2060,7 +2380,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     setRequiredFields(["textarea"]);
     setUserSearchQuery("");
     setEditingTask(null);
-    
+
     setTaskStep(1);
     setIsTaskModalOpen(true);
     setIsCalendarPopupOpen(false);
@@ -2076,7 +2396,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
   const openNewJobModal = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     setSelectedJobCalendarDate(null);
     setJobCalendarHour("00");
     setJobCalendarMinute("00");
@@ -2110,8 +2430,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
     <div className="app-wrapper">
       <header className="app-navbar">
         <div className="brand-section">
-          <button 
-            className="hamburger-btn" 
+          <button
+            className="hamburger-btn"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle Navigation Menu"
           >
@@ -2133,7 +2453,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
           <button
             type="button"
             className="action-icon-btn edit-btn"
-            style={{ 
+            style={{
               marginRight: '0.25rem',
               display: 'flex',
               alignItems: 'center',
@@ -2183,8 +2503,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
       </header>
 
       {isMobileMenuOpen && (
-        <div 
-          className="sidebar-backdrop" 
+        <div
+          className="sidebar-backdrop"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -2381,21 +2701,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                       <div className="empty-placeholder">No user rankings.</div>
                     ) : (
                       leaderboardList.map((user, idx) => {
-                         const rank = idx + 1;
-                         return (
-                           <div key={user.uid} className="leaderboard-item">
-                             <div className="leaderboard-profile-slot">
-                               <span className={`rank-badge rank-${rank <= 3 ? rank : ""}`}>
-                                 {rank}
-                               </span>
-                               <div className="leaderboard-user-details">
-                                 <span className="leaderboard-user-name">{user.name}</span>
-                                 <span className="leaderboard-user-email">{user.email}</span>
-                               </div>
-                             </div>
-                             <div className="leaderboard-xp-badge">{user.xp} EXP</div>
-                           </div>
-                         );
+                        const rank = idx + 1;
+                        return (
+                          <div key={user.uid} className="leaderboard-item">
+                            <div className="leaderboard-profile-slot">
+                              <span className={`rank-badge rank-${rank <= 3 ? rank : ""}`}>
+                                {rank}
+                              </span>
+                              <div className="leaderboard-user-details">
+                                <span className="leaderboard-user-name">{user.name}</span>
+                                <span className="leaderboard-user-email">{user.email}</span>
+                              </div>
+                            </div>
+                            <div className="leaderboard-xp-badge">{user.xp} EXP</div>
+                          </div>
+                        );
                       })
                     )}
                   </div>
@@ -2600,6 +2920,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                   setNewUserUsername("");
                   setNewUserEmail("");
                   setNewUserRole("user");
+                  setNewUserExp(0);
+                  setNewUserXp(0);
+                  setShowEditExp(false);
+                  setShowEditXp(false);
                   setIsUserModalOpen(true);
                 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '0.5rem' }}>
@@ -2683,11 +3007,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                                 <td style={{ color: "var(--primary-hover)", fontWeight: "700" }}>{user.exp} EXP</td>
                                 <td style={{ color: "var(--accent-gold)", fontWeight: "700" }}>{user.xp} XP</td>
                                 <td>
-                                  <div style={{ 
-                                    display: 'flex', 
-                                    justifyContent: 'center', 
+                                  <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'center',
                                     position: 'relative',
-                                    zIndex: activeUserMenuId === user.uid ? 100 : 1
+                                    zIndex: activeUserMenuId === user.uid ? 1000 : 1
                                   }}>
                                     <button
                                       type="button"
@@ -2701,18 +3025,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                                         <circle cx="12" cy="19" r="1.5" />
                                       </svg>
                                     </button>
-                                    
+
                                     {activeUserMenuId === user.uid && (
                                       <>
-                                        <div 
-                                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} 
+                                        <div
+                                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
                                           onClick={() => setActiveUserMenuId(null)}
                                         />
                                         <div style={{
                                           position: 'absolute',
                                           right: 0,
                                           top: '100%',
-                                          backgroundColor: 'var(--bg-surface-elevated)',
+                                          backgroundColor: 'var(--bg-surface-elevated, #1b1e2e)',
                                           border: '1px solid var(--border-light)',
                                           borderRadius: 'var(--border-radius-sm)',
                                           boxShadow: 'var(--shadow-lg)',
@@ -3073,9 +3397,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                                 </button>
                               </td>
                               <td>
-                                <div style={{ 
-                                  display: 'flex', 
-                                  justifyContent: 'center', 
+                                <div style={{
+                                  display: 'flex',
+                                  justifyContent: 'center',
                                   position: 'relative',
                                   zIndex: activeJobMenuId === job.id ? 100 : 1
                                 }}>
@@ -3091,11 +3415,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                                       <circle cx="12" cy="19" r="1.5" />
                                     </svg>
                                   </button>
-                                  
+
                                   {activeJobMenuId === job.id && (
                                     <>
-                                      <div 
-                                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} 
+                                      <div
+                                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
                                         onClick={() => setActiveJobMenuId(null)}
                                       />
                                       <div style={{
@@ -3549,7 +3873,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                 </svg>
               </button>
             </div>
-            
+
             {/* Stepper Header */}
             {(() => {
               const totalSteps = taskAssignedType === "all" ? 4 : 5;
@@ -3559,7 +3883,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                 <div className="stepper-container" style={{ marginTop: '1.5rem' }}>
                   <div className="stepper-line-bg"></div>
                   <div className="stepper-line-active" style={{ width: `${((taskStep - 1) / (totalSteps - 1)) * 100}%` }}></div>
-                  
+
                   <div className={`stepper-step ${taskStep === 1 ? "active" : ""} ${taskStep > 1 ? "completed" : ""}`}>
                     <div className="stepper-circle">1</div>
                     <div className="stepper-label">Details</div>
@@ -3588,7 +3912,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
             <div className="modal-body" style={{ paddingTop: '0.5rem' }}>
               <form onSubmit={handleCreateTask}>
-                
+
                 {/* Step 1 Content: Task Details */}
                 {taskStep === 1 && (
                   <div className="stepper-content-body" style={{ minHeight: '260px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -3632,13 +3956,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                           className="form-control"
                           style={{ paddingRight: '40px', cursor: 'pointer' }}
                           readOnly
-                           value={
-                            selectedCalendarDate
+                          value={
+                            selectedCalendarDate && calendarTarget === "task"
                               ? `${selectedCalendarDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${calendarHour.padStart(2, '0')}:${calendarMinute.padStart(2, '0')}`
-                              : ""
+                              : taskDeadline
+                                ? `${new Date(taskDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${new Date(taskDeadline).getHours().toString().padStart(2, '0')}:${new Date(taskDeadline).getMinutes().toString().padStart(2, '0')}`
+                                : ""
                           }
                           placeholder="Select deadline date & time..."
-                          onClick={() => setIsCalendarPopupOpen(!isCalendarPopupOpen)}
+                          onClick={() => openCalendarForTarget("task", taskDeadline)}
                           required
                         />
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>
@@ -3683,7 +4009,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                   <div className="stepper-content-body" style={{ minHeight: '260px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label">Select Assigned Users</label>
-                      
+
                       {/* Search Input */}
                       <div style={{ marginBottom: '0.75rem' }}>
                         <input
@@ -3893,10 +4219,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                             className="btn btn-primary"
                             onClick={() => {
                               if (taskStep === 1) {
-                                  if (!taskTitle.trim() || !taskDescription.trim()) {
-                                    onShowToast("Task title and description are required.", "error");
-                                    return;
-                                  }
+                                if (!taskTitle.trim() || !taskDescription.trim()) {
+                                  onShowToast("Task title and description are required.", "error");
+                                  return;
+                                }
                               } else if (taskStep === 2) {
                                 if (!taskDeadline) {
                                   onShowToast("Task deadline date & time are required.", "error");
@@ -3941,7 +4267,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                 </svg>
               </button>
             </div>
-            
+
             {/* Stepper Header */}
             {(() => {
               const totalSteps = jobAssignedType === "all" ? 4 : 5;
@@ -3951,7 +4277,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                 <div className="stepper-container" style={{ marginTop: '1.5rem' }}>
                   <div className="stepper-line-bg"></div>
                   <div className="stepper-line-active" style={{ width: `${((jobStep - 1) / (totalSteps - 1)) * 100}%` }}></div>
-                  
+
                   <div className={`stepper-step ${jobStep === 1 ? "active" : ""} ${jobStep > 1 ? "completed" : ""}`}>
                     <div className="stepper-circle">1</div>
                     <div className="stepper-label">Details</div>
@@ -3980,7 +4306,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
             <div className="modal-body" style={{ paddingTop: '0.5rem' }}>
               <form onSubmit={handleCreateJob}>
-                
+
                 {/* Step 1 Content: Job Details */}
                 {jobStep === 1 && (
                   <div className="stepper-content-body" style={{ minHeight: '260px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -4072,7 +4398,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                   <div className="stepper-content-body" style={{ minHeight: '260px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label">Select Assigned Users</label>
-                      
+
                       {/* Search Input */}
                       <div style={{ marginBottom: '0.75rem' }}>
                         <input
@@ -4283,10 +4609,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                             className="btn btn-primary"
                             onClick={() => {
                               if (jobStep === 1) {
-                                  if (!jobTitle.trim() || !jobDescription.trim()) {
-                                    onShowToast("Job title and description are required.", "error");
-                                    return;
-                                  }
+                                if (!jobTitle.trim() || !jobDescription.trim()) {
+                                  onShowToast("Job title and description are required.", "error");
+                                  return;
+                                }
                               } else if (jobStep === 2) {
                                 if (!jobDeadline) {
                                   onShowToast("Job deadline date & time are required.", "error");
@@ -4513,7 +4839,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                       &rarr;
                     </button>
                   </div>
-                  
+
                   {/* Days of week and days grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', padding: '0.35rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-color)' }}>
                     {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
@@ -4537,13 +4863,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                       // Days in the month
                       for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
                         const cellDate = new Date(currentCalendarYear, currentCalendarMonth, dayNum);
-                        const isSelected = selectedJobCalendarDate && 
-                          (selectedJobCalendarDate as any).getDate() === dayNum && 
-                          (selectedJobCalendarDate as any).getMonth() === currentCalendarMonth && 
+                        const isSelected = selectedJobCalendarDate &&
+                          (selectedJobCalendarDate as any).getDate() === dayNum &&
+                          (selectedJobCalendarDate as any).getMonth() === currentCalendarMonth &&
                           (selectedJobCalendarDate as any).getFullYear() === currentCalendarYear;
-                        
-                        const isToday = today.getDate() === dayNum && 
-                          today.getMonth() === currentCalendarMonth && 
+
+                        const isToday = today.getDate() === dayNum &&
+                          today.getMonth() === currentCalendarMonth &&
                           today.getFullYear() === currentCalendarYear;
 
                         const isPast = cellDate < today;
@@ -4568,15 +4894,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                               borderRadius: '6px',
                               border: 'none',
                               cursor: isPast ? 'not-allowed' : 'pointer',
-                              backgroundColor: isSelected 
-                                ? 'var(--primary)' 
-                                : isToday 
-                                  ? 'var(--bg-surface-hover)' 
+                              backgroundColor: isSelected
+                                ? 'var(--primary)'
+                                : isToday
+                                  ? 'var(--bg-surface-hover)'
                                   : 'transparent',
-                              color: isSelected 
-                                ? '#fff' 
-                                : isPast 
-                                  ? 'var(--text-muted)' 
+                              color: isSelected
+                                ? '#fff'
+                                : isPast
+                                  ? 'var(--text-muted)'
                                   : 'var(--text-primary)',
                               transition: 'all var(--transition-fast)',
                               outline: 'none',
@@ -4608,7 +4934,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                       Change Date
                     </button>
                   </div>
-                  
+
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', margin: '0.25rem 0' }}>
                     <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginRight: '0.25rem' }}>Time (24h):</label>
                     <input
@@ -4738,6 +5064,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                     <option value="admin">Admin</option>
                   </select>
                 </div>
+
+                {editingUser && (
+                  <div className="form-group">
+                    <label className="form-label" style={{ display: 'block', marginBottom: '0.5rem' }}>Adjust User Stats</label>
+                    <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${showEditExp ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setShowEditExp(!showEditExp)}
+                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', height: 'auto', display: 'inline-flex', alignItems: 'center' }}
+                      >
+                        {showEditExp ? 'Hide EXP Control' : 'Adjust EXP'}
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${showEditXp ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setShowEditXp(!showEditXp)}
+                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', height: 'auto', display: 'inline-flex', alignItems: 'center' }}
+                      >
+                        {showEditXp ? 'Hide XP Control' : 'Adjust XP'}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      {showEditExp && (
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" htmlFor="user-exp">EXP Balance</label>
+                          <input
+                            id="user-exp"
+                            type="number"
+                            className="form-control"
+                            value={newUserExp}
+                            onChange={(e) => setNewUserExp(parseInt(e.target.value, 10) || 0)}
+                          />
+                        </div>
+                      )}
+                      {showEditXp && (
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" htmlFor="user-xp">XP Balance</label>
+                          <input
+                            id="user-xp"
+                            type="number"
+                            className="form-control"
+                            value={newUserXp}
+                            onChange={(e) => setNewUserXp(parseInt(e.target.value, 10) || 0)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setIsUserModalOpen(false)}>
@@ -5029,7 +5406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
         </div>
       )}
 
-      {isCalendarPopupOpen && taskStep === 2 && createPortal(
+      {isCalendarPopupOpen && (taskStep === 2 || isQuestModalOpen) && createPortal(
         <>
           <div
             style={{
@@ -5077,7 +5454,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                       &rarr;
                     </button>
                   </div>
-                  
+
                   {/* Days of week and days grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', padding: '0.35rem', background: 'var(--bg-base)', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-color)' }}>
                     {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
@@ -5105,7 +5482,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                       Change Date
                     </button>
                   </div>
-                  
+
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', margin: '0.25rem 0' }}>
                     <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginRight: '0.25rem' }}>Time (24h):</label>
                     <input
@@ -5237,25 +5614,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                       </select>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                      <div className="form-group">
+                      <div className="form-group" style={{ position: 'relative' }}>
                         <label className="form-label">Start Date & Time</label>
-                        <input
-                          type="datetime-local"
-                          className="form-control"
-                          value={questStartTime}
-                          onChange={(e) => setQuestStartTime(e.target.value)}
-                          required
-                        />
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type="text"
+                            className="form-control"
+                            style={{ paddingRight: '40px', cursor: 'pointer' }}
+                            readOnly
+                            value={
+                              questStartTime
+                                ? `${new Date(questStartTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${new Date(questStartTime).getHours().toString().padStart(2, '0')}:${new Date(questStartTime).getMinutes().toString().padStart(2, '0')}`
+                                : ""
+                            }
+                            placeholder="Select start date & time..."
+                            onClick={() => openCalendarForTarget("questStart", questStartTime)}
+                            required
+                          />
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                          </svg>
+                        </div>
                       </div>
-                      <div className="form-group">
+                      <div className="form-group" style={{ position: 'relative' }}>
                         <label className="form-label">End Date & Time</label>
-                        <input
-                          type="datetime-local"
-                          className="form-control"
-                          value={questEndTime}
-                          onChange={(e) => setQuestEndTime(e.target.value)}
-                          required
-                        />
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type="text"
+                            className="form-control"
+                            style={{ paddingRight: '40px', cursor: 'pointer' }}
+                            readOnly
+                            value={
+                              questEndTime
+                                ? `${new Date(questEndTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${new Date(questEndTime).getHours().toString().padStart(2, '0')}:${new Date(questEndTime).getMinutes().toString().padStart(2, '0')}`
+                                : ""
+                            }
+                            placeholder="Select end date & time..."
+                            onClick={() => openCalendarForTarget("questEnd", questEndTime)}
+                            required
+                          />
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }}>
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                          </svg>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -5296,14 +5703,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
                 {questStep === 3 && (
                   <div className="stepper-content-body" style={{ minHeight: '280px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+                    {/* Separate Template Download Buttons & Bulk Import Row */}
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', width: '100%', flexWrap: 'wrap' }}>
+                      {/* Separate Template Download Buttons */}
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', background: 'var(--bg-surface-hover)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)', flexGrow: 1 }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Get Download Templates:</span>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadTemplate("mcq")} style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', height: 'auto' }}>MCQ</button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadTemplate("text")} style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', height: 'auto' }}>Text</button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadTemplate("link")} style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', height: 'auto' }}>Link</button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadTemplate("upload")} style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', height: 'auto' }}>File</button>
+                      </div>
+
+                      {/* Upload Button container */}
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <label
+                          className="btn btn-primary btn-sm"
+                          style={{
+                            padding: '0.75rem 1.25rem',
+                            fontSize: '0.75rem',
+                            height: 'auto',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            backgroundColor: 'var(--success, #10b981)',
+                            borderColor: 'var(--success, #10b981)',
+                            color: '#fff',
+                            marginBottom: 0,
+                            borderRadius: '8px',
+                            fontWeight: 600
+                          }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                          </svg>
+                          Upload
+                          <input
+                            type="file"
+                            accept=".json"
+                            onChange={handleBulkUpload}
+                            style={{ display: 'none' }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+
+
                     <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '1rem', background: 'var(--bg-surface-hover)' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Add Quest Question / Task</div>
-                      
-                      <QuestQuestionBuilderForm
-                        onAdd={(newQ) => {
-                          setQuestQuestions(prev => [...prev, newQ]);
+                      <div 
+                        style={{ 
+                          fontSize: '0.85rem', 
+                          fontWeight: 600, 
+                          color: 'var(--text-primary)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          userSelect: 'none'
                         }}
-                      />
+                        onClick={() => setIsManualQuestionFormOpen(!isManualQuestionFormOpen)}
+                      >
+                        <span>Add Quest Question / Task (Manual)</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {isManualQuestionFormOpen ? "▲ Collapse" : "▼ Expand"}
+                        </span>
+                      </div>
+
+                      {isManualQuestionFormOpen && (
+                        <div style={{ marginTop: '1rem' }}>
+                          <QuestQuestionBuilderForm
+                            onAdd={(newQ) => {
+                              setQuestQuestions(prev => [...prev, newQ]);
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ flex: 1, maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-sm)', padding: '0.5rem' }}>
@@ -5351,12 +5827,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                   >
                     {questStep === 1 ? "Cancel" : "Back"}
                   </button>
-                  
+
                   {questStep < 3 ? (
                     <button
                       type="button"
                       className="btn btn-primary"
-                      onClick={() => setQuestStep(prev => prev + 1)}
+                      onClick={() => {
+                        if (questStep === 1) {
+                          if (!questTitle.trim() || !questDescription.trim() || !questStartTime || !questEndTime) {
+                            onShowToast("Quest title, description, start time, and end time are required.", "error");
+                            return;
+                          }
+                        }
+                        setQuestStep(prev => prev + 1);
+                      }}
                     >
                       Next
                     </button>
@@ -5386,7 +5870,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
               </button>
             </div>
-            
+
             <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: '1rem' }}>
               {questGradingLoading ? (
                 <div style={{ textAlign: 'center', padding: '2rem' }}>Loading participants...</div>
@@ -5403,58 +5887,126 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
 
                     return (
                       <div key={part.id} style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '1rem', background: 'var(--bg-surface)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>
+                        <div 
+                          style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center', 
+                            cursor: 'pointer',
+                            userSelect: 'none'
+                          }}
+                          onClick={() => setExpandedGradingUsers(prev => ({ ...prev, [part.id]: !prev[part.id] }))}
+                        >
                           <div>
                             <strong>{user.name || "Unknown User"}</strong>
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>@{user.username || "unknown"}</span>
                           </div>
-                          <span className={`status-capsule ${part.status === 'submitted' ? 'pending' : part.status === 'completed' ? 'active' : 'expired'}`} style={{ textTransform: 'capitalize' }}>
-                            {part.status}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span className={`status-capsule ${part.status === 'submitted' ? 'pending' : part.status === 'completed' ? 'active' : 'expired'}`} style={{ textTransform: 'capitalize' }}>
+                              {part.status}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              {expandedGradingUsers[part.id] ? "▲" : "▼"}
+                            </span>
+                          </div>
                         </div>
 
-                        {/* Display answers */}
-                        {isSubmitted || isGraded ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
-                            {questQuestionsList.map((q: any, idx: number) => {
-                              const ans = userAnswers[idx];
-                              return (
-                                <div key={idx} style={{ fontSize: '0.8rem', background: 'var(--bg-base)', padding: '0.5rem', borderRadius: '4px' }}>
-                                  <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Q{idx + 1}: {q.question}</div>
-                                  <div style={{ marginTop: '0.25rem', color: 'var(--text-primary)', wordBreak: 'break-all' }}>
-                                    <strong>Submitted Answer:</strong> {ans !== undefined ? String(ans) : <span style={{ color: 'var(--text-muted)' }}>None</span>}
-                                  </div>
-                                  {q.type === "mcq" && (
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                      Correct Answer: {q.answer}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                            User joined but has not submitted the quest yet.
-                          </div>
-                        )}
+                        {expandedGradingUsers[part.id] && (
+                          <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+                            {/* Display answers */}
+                            {isSubmitted || isGraded ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+                                {(() => {
+                                  const categories = Array.from(new Set(questQuestionsList.map((q: any) => q.type || 'text'))) as string[];
+                                  
+                                  const getCategoryLabel = (type: string) => {
+                                    switch(type) {
+                                      case 'mcq': return 'MCQ Tasks';
+                                      case 'text': return 'Text Tasks';
+                                      case 'link': return 'Link Tasks';
+                                      case 'upload': return 'File Upload Tasks';
+                                      default: return `${type.toUpperCase()} Tasks`;
+                                    }
+                                  };
 
-                        {isSubmitted && (
-                          <QuestParticipantGradingAction
-                            maxScore={questQuestionsList.length * 10}
-                            defaultXp={questQuestionsList.reduce((acc: number, q: any) => acc + (q.xp_reward || 0), 0)}
-                            defaultExp={questQuestionsList.reduce((acc: number, q: any) => acc + (q.exp_reward || 0), 0)}
-                            onGrade={(score, xp, exp, success) => {
-                              handleGradeQuestParticipant(part.id, part.user_id, score, xp, exp, success ? "completed" : "failed");
-                            }}
-                          />
-                        )}
+                                  return categories.map((catType) => {
+                                    const catKey = `${part.id}-${catType}`;
+                                    const isCatExpanded = !!expandedGradingCategories[catKey];
+                                    const catQuestions = questQuestionsList
+                                      .map((q: any, idx: number) => ({ q, idx }))
+                                      .filter((item: any) => (item.q.type || 'text') === catType);
 
-                        {isGraded && (
-                          <div style={{ fontSize: '0.75rem', background: 'var(--bg-surface-elevated)', padding: '0.5rem', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-                            <span>Score: {part.score}</span>
-                            <span>Rewarded: {part.xp_earned} XP / {part.exp_earned} EXP</span>
-                            <span>Reviewed on: {new Date(part.reviewed_at).toLocaleDateString()}</span>
+                                    return (
+                                      <div key={catType} style={{ border: '1px solid var(--border-color)', borderRadius: '4px', background: 'var(--bg-base)', overflow: 'hidden' }}>
+                                        <div 
+                                          style={{ 
+                                            padding: '0.5rem 0.75rem', 
+                                            background: 'var(--bg-surface-hover)', 
+                                            display: 'flex', 
+                                            justifyContent: 'space-between', 
+                                            alignItems: 'center', 
+                                            cursor: 'pointer',
+                                            fontWeight: 600,
+                                            fontSize: '0.8rem',
+                                            color: 'var(--text-secondary)'
+                                          }}
+                                          onClick={() => setExpandedGradingCategories(prev => ({ ...prev, [catKey]: !prev[catKey] }))}
+                                        >
+                                          <span>{getCategoryLabel(catType)} ({catQuestions.length})</span>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                            {isCatExpanded ? "▲" : "▼"}
+                                          </span>
+                                        </div>
+
+                                        {isCatExpanded && (
+                                          <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
+                                            {catQuestions.map(({ q, idx }: any) => {
+                                              const ans = userAnswers[idx];
+                                              return (
+                                                <div key={idx} style={{ fontSize: '0.8rem', background: 'var(--bg-surface)', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                                                  <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Q{idx + 1}: {q.question}</div>
+                                                  <div style={{ marginTop: '0.25rem', color: 'var(--text-primary)', wordBreak: 'break-all' }}>
+                                                    <strong>Submitted Answer:</strong> {ans !== undefined ? String(ans) : <span style={{ color: 'var(--text-muted)' }}>None</span>}
+                                                  </div>
+                                                  {q.type === "mcq" && (
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                                      Correct Answer: {q.answer}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                                User joined but has not submitted the quest yet.
+                              </div>
+                            )}
+
+                            {isSubmitted && (
+                              <QuestParticipantGradingAction
+                                maxScore={questQuestionsList.length * 10}
+                                defaultXp={questQuestionsList.reduce((acc: number, q: any) => acc + (q.xp_reward || 0), 0)}
+                                defaultExp={questQuestionsList.reduce((acc: number, q: any) => acc + (q.exp_reward || 0), 0)}
+                                onlyAccept={questQuestionsList.every((q: any) => q.type === "mcq")}
+                                onGrade={(score, xp, exp, success) => {
+                                  handleGradeQuestParticipant(part.id, part.user_id, score, xp, exp, success ? "completed" : "failed");
+                                }}
+                              />
+                            )}
+
+                            {isGraded && (
+                              <div style={{ fontSize: '0.75rem', background: 'var(--bg-surface-elevated)', padding: '0.5rem', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                                <span>Score: {part.score}</span>
+                                <span>Rewarded: {part.xp_earned} XP / {part.exp_earned} EXP</span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -5462,6 +6014,133 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast, cur
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkPreview && (
+        <div className="modal-overlay" style={{ zIndex: 1300 }} onClick={() => setShowBulkPreview(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '750px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <div className="modal-title">Bulk Import Preview List</div>
+              <button type="button" className="modal-close-btn" onClick={() => setShowBulkPreview(false)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {(() => {
+                const filteredBulkQuestions = bulkUploadedQuestions.filter(q =>
+                  q.question?.toLowerCase().includes(bulkSearchQuery.toLowerCase()) ||
+                  q.type?.toLowerCase().includes(bulkSearchQuery.toLowerCase())
+                );
+                const allSelected = filteredBulkQuestions.length > 0 && filteredBulkQuestions.every(q => selectedBulkQuestionIndices.includes(q.originalIndex));
+                return (
+                  <>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Filter questions by query search..."
+                      value={bulkSearchQuery}
+                      onChange={(e) => setBulkSearchQuery(e.target.value)}
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                    />
+
+                    <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
+                      <table className="user-table" style={{ fontSize: '0.75rem', width: '100%' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--bg-base)' }}>
+                            <th style={{ width: '40px', padding: '0.5rem', textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                onChange={() => {
+                                  const filteredIndices = filteredBulkQuestions.map(q => q.originalIndex);
+                                  if (allSelected) {
+                                    setSelectedBulkQuestionIndices(prev => prev.filter(idx => !filteredIndices.includes(idx)));
+                                  } else {
+                                    setSelectedBulkQuestionIndices(prev => {
+                                      const newSel = [...prev];
+                                      filteredIndices.forEach(idx => {
+                                        if (!newSel.includes(idx)) newSel.push(idx);
+                                      });
+                                      return newSel;
+                                    });
+                                  }
+                                }}
+                              />
+                            </th>
+                            <th style={{ padding: '0.5rem' }}>Type</th>
+                            <th style={{ padding: '0.5rem' }}>Prompt Details</th>
+                            <th style={{ padding: '0.5rem' }}>Rewards</th>
+                            <th style={{ padding: '0.5rem' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredBulkQuestions.map((q) => (
+                            <tr key={q.originalIndex} style={{ backgroundColor: q.isValid ? 'rgba(16, 185, 129, 0.04)' : 'rgba(239, 68, 68, 0.04)' }}>
+                              <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedBulkQuestionIndices.includes(q.originalIndex)}
+                                  onChange={() => {
+                                    setSelectedBulkQuestionIndices(prev =>
+                                      prev.includes(q.originalIndex)
+                                        ? prev.filter(idx => idx !== q.originalIndex)
+                                        : [...prev, q.originalIndex]
+                                    );
+                                  }}
+                                />
+                              </td>
+                              <td style={{ padding: '0.5rem', fontWeight: 600 }}>
+                                <span className="brand-badge" style={{ fontSize: '0.65rem' }}>{q.type}</span>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>
+                                <div style={{ fontWeight: 500 }}>{q.question}</div>
+                                {q.options && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Options: {q.options.join(", ")}</div>}
+                                {q.answer && <div style={{ fontSize: '0.65rem', color: 'var(--accent-gold)' }}>Correct: {q.answer}</div>}
+                              </td>
+                              <td style={{ padding: '0.5rem', fontWeight: 600 }}>
+                                <div style={{ color: 'var(--accent-gold)' }}>+{q.xp_reward} XP</div>
+                                <div style={{ color: 'var(--primary-hover)' }}>+{q.exp_reward} EXP</div>
+                              </td>
+                              <td style={{ padding: '0.5rem', color: q.isValid ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                                {q.isValid ? "Valid Task Match" : `Unmatched: ${q.errors.join("; ")}`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowBulkPreview(false)}>Cancel</button>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={selectedBulkQuestionIndices.length === 0}
+                        onClick={() => {
+                          const toImport = bulkUploadedQuestions.filter((q, idx) => selectedBulkQuestionIndices.includes(idx) && q.isValid);
+                          setQuestQuestions(prev => [...prev, ...toImport.map(q => ({
+                            type: q.type,
+                            question: q.question,
+                            options: q.options,
+                            answer: q.answer,
+                            xp_reward: parseInt(q.xp_reward, 10) || 0,
+                            exp_reward: parseInt(q.exp_reward, 10) || 0
+                          }))]);
+                          onShowToast(`Successfully imported ${toImport.length} tasks!`, "success");
+                          setShowBulkPreview(false);
+                          setBulkUploadedQuestions([]);
+                          setSelectedBulkQuestionIndices([]);
+                        }}
+                      >
+                        Import Selected Tasks ({selectedBulkQuestionIndices.filter(idx => bulkUploadedQuestions[idx]?.isValid).length})
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

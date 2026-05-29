@@ -3,8 +3,10 @@ import { signOut as authSignOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { supabase } from "../supabaseClient";
 import { SpotlightCard, ShinyText, CountUp, BlurReveal } from "./reactbits";
+import { generateParagraph } from "../utils/typingGenerator";
+import { generateOddOneOutQuestion, type OddOneOutQuestion } from "../utils/oddOneOutGenerator";
+import { generateRegexQuestion, type RegexQuestion } from "../utils/regexDetectiveGenerator";
 import { sendDeadlineReminder } from "../utils/email";
-
 
 interface UserDashboardProps {
   onShowToast: (message: string, type: "success" | "error") => void;
@@ -465,7 +467,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   onNavigateToAdmin,
 }) => {
   // Navigation tabs: overview, tasks, leaderboard, evaluate, jobs
-  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "leaderboard" | "evaluate" | "jobs" | "quests">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "leaderboard" | "evaluate" | "jobs" | "quests" | "hub">("overview");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -483,6 +485,946 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [isDailyRewardOpen, setIsDailyRewardOpen] = useState(false);
   const [claimedXpRevealed, setClaimedXpRevealed] = useState<number | null>(null);
   const [isClaimingDaily, setIsClaimingDaily] = useState(false);
+
+  const [hubActiveGame, setHubActiveGame] = useState<string | null>(null);
+  const [isCustomTime, setIsCustomTime] = useState(false);
+  const [isTypingHistoryOpen, setIsTypingHistoryOpen] = useState(false);
+
+  // Typing Practice state
+  const [typingView, setTypingView] = useState<"setup" | "game" | "results">("setup");
+  const [typingTimeLimit, setTypingTimeLimit] = useState(1); // 1, 2, 3 minutes
+  const [typingDifficulty, setTypingDifficulty] = useState<"easy" | "medium" | "hard">("easy");
+  const [typingText, setTypingText] = useState("");
+  const [typingInput, setTypingInput] = useState("");
+  const [typingTimeLeft, setTypingTimeLeft] = useState(60);
+  const [isTypingActive, setIsTypingActive] = useState(false);
+  const [typingMistakes, setTypingMistakes] = useState(0);
+  const [typingStruggleLetters, setTypingStruggleLetters] = useState<Record<string, number>>({});
+  const [typingStats, setTypingStats] = useState({ wpm: 0, accuracy: 100, mistakes: 0, wordsTyped: 0 });
+  const [typingHistory, setTypingHistory] = useState<any[]>([]);
+
+  // Odd One Out game states
+  const [oddOneOutView, setOddOneOutView] = useState<"setup" | "game" | "results">("setup");
+  const [oddOneOutDifficulty, setOddOneOutDifficulty] = useState<"easy" | "medium" | "hard">("easy");
+  const [oddOneOutTimeLeft, setOddOneOutTimeLeft] = useState(15);
+  const [oddOneOutScore, setOddOneOutScore] = useState(0);
+  const [oddOneOutStreak, setOddOneOutStreak] = useState(0);
+  const [oddOneOutLives, setOddOneOutLives] = useState(3);
+  const [currentOddQuestion, setCurrentOddQuestion] = useState<OddOneOutQuestion | null>(null);
+  const [selectedOddAnswer, setSelectedOddAnswer] = useState<string | null>(null);
+  const [isCorrectOddSelected, setIsCorrectOddSelected] = useState<boolean | null>(null);
+  const [isOddOneOutActive, setIsOddOneOutActive] = useState(false);
+  const [oddOneOutHistory, setOddOneOutHistory] = useState<any[]>([]);
+  const [oddOneOutAnsweredCount, setOddOneOutAnsweredCount] = useState(0);
+  const [oddOneOutQuestionsLimit, setOddOneOutQuestionsLimit] = useState(10);
+  const [usedOddAnswers, setUsedOddAnswers] = useState<string[]>([]);
+  const [historyActiveTab, setHistoryActiveTab] = useState<"typing" | "odd_one_out" | "regex">("typing");
+  const oddOneOutTimerRef = React.useRef<any>(null);
+
+  const [isOddOneOutLoading, setIsOddOneOutLoading] = useState(false);
+  const [hasPlayedTypingToday, setHasPlayedTypingToday] = useState(false);
+  const [hasPlayedOddOneOutToday, setHasPlayedOddOneOutToday] = useState(false);
+  const [currentTypingSessionId, setCurrentTypingSessionId] = useState<string | null>(null);
+  const [currentOddSessionId, setCurrentOddSessionId] = useState<string | null>(null);
+  const currentTypingSessionIdRef = React.useRef<string | null>(null);
+  const currentOddSessionIdRef = React.useRef<string | null>(null);
+
+  useEffect(() => {
+    currentTypingSessionIdRef.current = currentTypingSessionId;
+  }, [currentTypingSessionId]);
+
+  useEffect(() => {
+    currentOddSessionIdRef.current = currentOddSessionId;
+  }, [currentOddSessionId]);
+
+  // Regex Detective states
+  const [regexView, setRegexView] = useState<"setup" | "game" | "results">("setup");
+  const [regexDifficulty, setRegexDifficulty] = useState<"easy" | "medium" | "hard">("easy");
+  const [regexTimeLeft, setRegexTimeLeft] = useState(25);
+  const [regexScore, setRegexScore] = useState(0);
+  const [regexStreak, setRegexStreak] = useState(0);
+  const [regexLives, setRegexLives] = useState(3);
+  const [currentRegexQuestion, setCurrentRegexQuestion] = useState<RegexQuestion | null>(null);
+  const [selectedRegexAnswer, setSelectedRegexAnswer] = useState<string | null>(null);
+  const [hoveredRegexAnswer, setHoveredRegexAnswer] = useState<string | null>(null);
+  const [isCorrectRegexSelected, setIsCorrectRegexSelected] = useState<boolean | null>(null);
+  const [isRegexActive, setIsRegexActive] = useState(false);
+  const [isRegexLoading, setIsRegexLoading] = useState(false);
+  const [hasPlayedRegexToday, setHasPlayedRegexToday] = useState(false);
+  const [currentRegexSessionId, setCurrentRegexSessionId] = useState<string | null>(null);
+  const [regexHistory, setRegexHistory] = useState<any[]>([]);
+  const [regexAnsweredCount, setRegexAnsweredCount] = useState(0);
+  const [regexQuestionsLimit, setRegexQuestionsLimit] = useState(10);
+  const [usedRegexQuestionIds, setUsedRegexQuestionIds] = useState<string[]>([]);
+  const [typingXpEarned, setTypingXpEarned] = useState(0);
+  const [oddOneOutXpEarned, setOddOneOutXpEarned] = useState(0);
+  const [regexXpEarned, setRegexXpEarned] = useState(0);
+
+  const oddTotalCorrectRef = React.useRef(0);
+  const oddTotalTimeLeftRef = React.useRef(0);
+  const regexTotalCorrectRef = React.useRef(0);
+  const regexTotalTimeLeftRef = React.useRef(0);
+  
+  const currentRegexSessionIdRef = React.useRef<string | null>(null);
+  const regexTimerRef = React.useRef<any>(null);
+
+  useEffect(() => {
+    currentRegexSessionIdRef.current = currentRegexSessionId;
+  }, [currentRegexSessionId]);
+
+  const regexQuestionRef = React.useRef(currentRegexQuestion);
+  useEffect(() => {
+    regexQuestionRef.current = currentRegexQuestion;
+  }, [currentRegexQuestion]);
+
+  const regexScoreRef = React.useRef(regexScore);
+  useEffect(() => {
+    regexScoreRef.current = regexScore;
+  }, [regexScore]);
+
+  const regexStreakRef = React.useRef(regexStreak);
+  useEffect(() => {
+    regexStreakRef.current = regexStreak;
+  }, [regexStreak]);
+
+  const regexLivesRef = React.useRef(regexLives);
+  useEffect(() => {
+    regexLivesRef.current = regexLives;
+  }, [regexLives]);
+
+  const regexAnsweredRef = React.useRef(regexAnsweredCount);
+  useEffect(() => {
+    regexAnsweredRef.current = regexAnsweredCount;
+  }, [regexAnsweredCount]);
+
+  const usedRegexQuestionIdsRef = React.useRef(usedRegexQuestionIds);
+  useEffect(() => {
+    usedRegexQuestionIdsRef.current = usedRegexQuestionIds;
+  }, [usedRegexQuestionIds]);
+
+  const activeCharRef = React.useRef<HTMLSpanElement>(null);
+  const typingContainerRef = React.useRef<HTMLDivElement>(null);
+  const typingInputRef = React.useRef<HTMLInputElement>(null);
+  const typingTimerRef = React.useRef<any>(null);
+
+  // Initialize typing text
+  useEffect(() => {
+    if (activeTab === "hub" && typingView === "setup") {
+      setTypingText(generateParagraph(typingDifficulty, 3));
+    }
+  }, [typingDifficulty, activeTab, typingView]);
+
+  // Check daily play limits on mount/tab change
+  useEffect(() => {
+    if (currentUser?.uid) {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      
+      const startOfDay = start.toISOString();
+      const endOfDay = end.toISOString();
+
+      supabase
+        .from("game_sessions")
+        .select("id")
+        .eq("user_id", currentUser.uid)
+        .eq("game_type", "typing")
+        .gte("played_at", startOfDay)
+        .lte("played_at", endOfDay)
+        .limit(1)
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            setHasPlayedTypingToday(true);
+          } else {
+            setHasPlayedTypingToday(false);
+          }
+        });
+
+      supabase
+        .from("game_sessions")
+        .select("id")
+        .eq("user_id", currentUser.uid)
+        .eq("game_type", "odd_one_out")
+        .gte("played_at", startOfDay)
+        .lte("played_at", endOfDay)
+        .limit(1)
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            setHasPlayedOddOneOutToday(true);
+          } else {
+            setHasPlayedOddOneOutToday(false);
+          }
+        });
+
+      supabase
+        .from("game_sessions")
+        .select("id")
+        .eq("user_id", currentUser.uid)
+        .eq("game_type", "regex_detective")
+        .gte("played_at", startOfDay)
+        .lte("played_at", endOfDay)
+        .limit(1)
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            setHasPlayedRegexToday(true);
+          } else {
+            setHasPlayedRegexToday(false);
+          }
+        });
+    }
+  }, [currentUser?.uid, typingView, oddOneOutView, regexView, activeTab]);
+
+  // Regex Detective Timer effect
+  useEffect(() => {
+    if (isRegexActive) {
+      regexTimerRef.current = setInterval(() => {
+        setRegexTimeLeft((prev) => {
+          if (prev <= 1) {
+            handleRegexTimeExpired();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => {
+        if (regexTimerRef.current) clearInterval(regexTimerRef.current);
+      };
+    }
+  }, [isRegexActive]);
+
+  // Keep refs of stats and difficulty for the timer so it doesn't restart
+  const statsRef = React.useRef(typingStats);
+  useEffect(() => {
+    statsRef.current = typingStats;
+  }, [typingStats]);
+
+  const difficultyRef = React.useRef(typingDifficulty);
+  useEffect(() => {
+    difficultyRef.current = typingDifficulty;
+  }, [typingDifficulty]);
+
+  // Timer effect
+  useEffect(() => {
+    if (isTypingActive) {
+      typingTimerRef.current = setInterval(() => {
+        setTypingTimeLeft((prev) => {
+          if (prev <= 1) {
+            endTypingPractice();
+            clearInterval(typingTimerRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => {
+        if (typingTimerRef.current) clearInterval(typingTimerRef.current);
+      };
+    }
+  }, [isTypingActive]);
+
+  // Global keydown autofocus listener
+  useEffect(() => {
+    if (typingView === "game") {
+      const handleGlobalKeyDown = (e: KeyboardEvent) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+          return;
+        }
+        typingInputRef.current?.focus();
+      };
+      window.addEventListener('keydown', handleGlobalKeyDown);
+      return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }
+  }, [typingView]);
+
+  // Calculate live stats
+  useEffect(() => {
+    if (typingInput.length > 0) {
+      const timeSpent = (typingTimeLimit * 60 - typingTimeLeft) / 60; // in minutes
+      const wordsTyped = typingInput.length / 5;
+      const currentWpm = Math.round(wordsTyped / (timeSpent || 1/60));
+      const accuracy = Math.round(((typingInput.length - typingMistakes) / typingInput.length) * 100);
+      setTypingStats({
+        wpm: currentWpm,
+        accuracy: Math.max(0, accuracy),
+        mistakes: typingMistakes,
+        wordsTyped: Math.floor(wordsTyped)
+      });
+    }
+  }, [typingInput, typingMistakes, typingTimeLeft, typingTimeLimit]);
+
+  // Scrolling typing container to keep up with user cursor
+  useEffect(() => {
+    if (activeCharRef.current && typingContainerRef.current) {
+      const container = typingContainerRef.current;
+      const activeChar = activeCharRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const charRect = activeChar.getBoundingClientRect();
+      const relativeTop = charRect.top - containerRect.top;
+      if (relativeTop > containerRect.height / 2) {
+        container.scrollTo({
+          top: container.scrollTop + (relativeTop - containerRect.height / 2),
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [typingInput]);
+
+  const handleTypingInput = (value: string) => {
+    if (!isTypingActive) {
+      setIsTypingActive(true);
+    }
+    const currentInput = value;
+    const lastChar = currentInput[currentInput.length - 1];
+    const expectedChar = typingText[currentInput.length - 1];
+
+    if (lastChar !== expectedChar && currentInput.length > typingInput.length) {
+      setTypingMistakes((prev) => prev + 1);
+      if (expectedChar && expectedChar !== ' ') {
+        setTypingStruggleLetters(prev => ({
+          ...prev,
+          [expectedChar.toLowerCase()]: (prev[expectedChar.toLowerCase()] || 0) + 1
+        }));
+      }
+    }
+
+    setTypingInput(value);
+
+    // If near end of text, generate more and append
+    if (value.length > typingText.length - 20) {
+      const topStruggles = Object.entries(typingStruggleLetters)
+        .sort((a: any, b: any) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([char]) => char);
+        
+      const newParagraph = generateParagraph(typingDifficulty, 2, topStruggles);
+      setTypingText(prev => prev + ' ' + newParagraph);
+    }
+  };
+
+  const startTypingPractice = () => {
+    if (currentUser?.uid) {
+      supabase
+        .from("game_sessions")
+        .insert({
+          user_id: currentUser.uid,
+          game_type: "typing",
+          played_at: new Date().toISOString()
+        })
+        .select("id")
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error) console.error("Error saving typing session:", error);
+          if (data) setCurrentTypingSessionId(data.id);
+          setHasPlayedTypingToday(true);
+        });
+    }
+    setTypingInput("");
+    setTypingMistakes(0);
+    setTypingTimeLeft(typingTimeLimit * 60);
+    setTypingStats({ wpm: 0, accuracy: 100, mistakes: 0, wordsTyped: 0 });
+    setTypingText(generateParagraph(typingDifficulty, 3));
+    setIsTypingActive(true); // Starts immediately
+    setTypingView("game");
+    
+    // Focus typing input immediately
+    setTimeout(() => {
+      typingInputRef.current?.focus();
+    }, 10);
+  };
+
+  const endTypingPractice = async (finalStats = statsRef.current, finalDiff = difficultyRef.current) => {
+    setIsTypingActive(false);
+    setTypingView("results");
+    
+    // Calculate dynamic XP reward
+    const baseXP = finalStats.wpm * (finalStats.accuracy / 100);
+    const difficultyMultiplier = finalDiff === "easy" ? 1.0 : finalDiff === "medium" ? 1.25 : 1.6;
+    const durationMultiplier = typingTimeLimit; // 1, 2, 3, etc. min
+    const calculatedXP = Math.round(baseXP * difficultyMultiplier * durationMultiplier * 0.5);
+    const xpReward = Math.min(100, Math.max(5, calculatedXP));
+    
+    setTypingXpEarned(xpReward);
+
+    const newSession = {
+      date: new Date().toLocaleTimeString(),
+      wpm: finalStats.wpm,
+      accuracy: finalStats.accuracy,
+      mistakes: finalStats.mistakes,
+      difficulty: finalDiff,
+      xpEarned: xpReward
+    };
+    setTypingHistory(prevHist => [newSession, ...prevHist]);
+    
+    // Save to database
+    if (currentTypingSessionIdRef.current) {
+      supabase
+        .from("game_sessions")
+        .update({
+          score: finalStats.wpm,
+          details: {
+            accuracy: finalStats.accuracy,
+            mistakes: finalStats.mistakes,
+            wordsTyped: finalStats.wordsTyped,
+            difficulty: finalDiff,
+            xpEarned: xpReward
+          }
+        })
+        .eq("id", currentTypingSessionIdRef.current)
+        .then(({ error }) => {
+          if (error) console.error("Error updating typing session score:", error);
+        });
+    }
+
+    if (xpReward > 0 && currentUser?.uid) {
+      try {
+        const { data: userData, error: fetchErr } = await supabase
+          .from("users")
+          .select("xp")
+          .eq("uid", currentUser.uid)
+          .maybeSingle();
+          
+        if (!fetchErr && userData) {
+          const currentXp = userData.xp || 0;
+          const newXp = currentXp + xpReward;
+          
+          const { error: updateErr } = await supabase
+            .from("users")
+            .update({
+              xp: newXp
+            })
+            .eq("uid", currentUser.uid);
+            
+          if (!updateErr) {
+            onShowToast(`Completed! Earned +${xpReward} XP!`, "success");
+            if (allLevels.length > 0) {
+              await checkAndTriggerLevelUp(currentXp, newXp, allLevels);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to pay out rewards:", err);
+      }
+    }
+  };
+
+  const quitTypingPractice = () => {
+    setIsTypingActive(false);
+    setTypingView("setup");
+  };
+
+  // Keep refs of stats and difficulty for the Odd One Out timer so it doesn't restart
+  const oddQuestionRef = React.useRef(currentOddQuestion);
+  useEffect(() => {
+    oddQuestionRef.current = currentOddQuestion;
+  }, [currentOddQuestion]);
+
+  const oddScoreRef = React.useRef(oddOneOutScore);
+  useEffect(() => {
+    oddScoreRef.current = oddOneOutScore;
+  }, [oddOneOutScore]);
+
+  const oddStreakRef = React.useRef(oddOneOutStreak);
+  useEffect(() => {
+    oddStreakRef.current = oddOneOutStreak;
+  }, [oddOneOutStreak]);
+
+  const oddLivesRef = React.useRef(oddOneOutLives);
+  useEffect(() => {
+    oddLivesRef.current = oddOneOutLives;
+  }, [oddOneOutLives]);
+
+  const oddAnsweredRef = React.useRef(oddOneOutAnsweredCount);
+  useEffect(() => {
+    oddAnsweredRef.current = oddOneOutAnsweredCount;
+  }, [oddOneOutAnsweredCount]);
+
+  const usedOddAnswersRef = React.useRef(usedOddAnswers);
+  useEffect(() => {
+    usedOddAnswersRef.current = usedOddAnswers;
+  }, [usedOddAnswers]);
+
+  // Odd One Out Timer effect
+  useEffect(() => {
+    if (isOddOneOutActive) {
+      oddOneOutTimerRef.current = setInterval(() => {
+        setOddOneOutTimeLeft((prev) => {
+          if (prev <= 1) {
+            handleOddOneOutTimeExpired();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => {
+        if (oddOneOutTimerRef.current) clearInterval(oddOneOutTimerRef.current);
+      };
+    }
+  }, [isOddOneOutActive]);
+
+  const handleOddOneOutTimeExpired = () => {
+    setIsOddOneOutActive(false);
+    setIsCorrectOddSelected(false);
+    setSelectedOddAnswer(""); // empty string represents timeout
+    
+    const nextLives = oddLivesRef.current - 1;
+    setOddOneOutLives(nextLives);
+    setOddOneOutStreak(0);
+    
+    const nextCount = oddAnsweredRef.current + 1;
+    setOddOneOutAnsweredCount(nextCount);
+
+    // Track the answer to exclude it from future questions
+    let nextExcluded = usedOddAnswersRef.current;
+    if (oddQuestionRef.current) {
+      nextExcluded = [...nextExcluded, oddQuestionRef.current.answer];
+      setUsedOddAnswers(nextExcluded);
+    }
+
+    setTimeout(() => {
+      setSelectedOddAnswer(null);
+      setIsCorrectOddSelected(null);
+
+      if (nextLives <= 0 || (oddOneOutQuestionsLimit > 0 && nextCount >= oddOneOutQuestionsLimit)) {
+        endOddOneOutGame(oddOneOutScore, nextLives, nextCount);
+      } else {
+        setIsOddOneOutLoading(true);
+        generateOddOneOutQuestion(oddOneOutDifficulty, nextExcluded).then((q) => {
+          setCurrentOddQuestion(q);
+          const initialTime = oddOneOutDifficulty === "easy" ? 15 : oddOneOutDifficulty === "medium" ? 12 : 8;
+          setOddOneOutTimeLeft(initialTime);
+          setIsOddOneOutActive(true);
+          setIsOddOneOutLoading(false);
+        }).catch((err) => {
+          console.error(err);
+          setIsOddOneOutLoading(false);
+        });
+      }
+    }, 1500);
+  };
+
+  const handleOddAnswerSelect = (answer: string) => {
+    if (selectedOddAnswer !== null) return;
+    
+    setIsOddOneOutActive(false);
+    setSelectedOddAnswer(answer);
+    
+    const isCorrect = answer === currentOddQuestion?.answer;
+    setIsCorrectOddSelected(isCorrect);
+    
+    let nextScore = oddOneOutScore;
+    let nextStreak = oddOneOutStreak;
+    let nextLives = oddOneOutLives;
+    
+    if (isCorrect) {
+      oddTotalCorrectRef.current += 1;
+      oddTotalTimeLeftRef.current += oddOneOutTimeLeft;
+      nextStreak += 1;
+      setOddOneOutStreak(nextStreak);
+      
+      const diffMultiplier = oddOneOutDifficulty === "easy" ? 10 : oddOneOutDifficulty === "medium" ? 20 : 35;
+      const streakMultiplier = Math.min(3, 1 + Math.floor(nextStreak / 3) * 0.5);
+      const points = Math.round(diffMultiplier * streakMultiplier);
+      nextScore += points;
+      setOddOneOutScore(nextScore);
+    } else {
+      nextStreak = 0;
+      setOddOneOutStreak(0);
+      nextLives -= 1;
+      setOddOneOutLives(nextLives);
+    }
+    
+    const nextCount = oddOneOutAnsweredCount + 1;
+    setOddOneOutAnsweredCount(nextCount);
+
+    // Track the answer to exclude it from future questions
+    let nextExcluded = usedOddAnswersRef.current;
+    if (currentOddQuestion) {
+      nextExcluded = [...nextExcluded, currentOddQuestion.answer];
+      setUsedOddAnswers(nextExcluded);
+    }
+    
+    setTimeout(async () => {
+      setSelectedOddAnswer(null);
+      setIsCorrectOddSelected(null);
+      
+      if (nextLives <= 0 || (oddOneOutQuestionsLimit > 0 && nextCount >= oddOneOutQuestionsLimit)) {
+        await endOddOneOutGame(nextScore, nextLives, nextCount);
+      } else {
+        setIsOddOneOutLoading(true);
+        generateOddOneOutQuestion(oddOneOutDifficulty, nextExcluded).then((q) => {
+          setCurrentOddQuestion(q);
+          const initialTime = oddOneOutDifficulty === "easy" ? 15 : oddOneOutDifficulty === "medium" ? 12 : 8;
+          setOddOneOutTimeLeft(initialTime);
+          setIsOddOneOutActive(true);
+          setIsOddOneOutLoading(false);
+        }).catch((err) => {
+          console.error(err);
+          setIsOddOneOutLoading(false);
+        });
+      }
+    }, 1500);
+  };
+
+  const startOddOneOutGame = () => {
+    if (currentUser?.uid) {
+      supabase
+        .from("game_sessions")
+        .insert({
+          user_id: currentUser.uid,
+          game_type: "odd_one_out",
+          played_at: new Date().toISOString()
+        })
+        .select("id")
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error) console.error("Error saving odd one out session:", error);
+          if (data) setCurrentOddSessionId(data.id);
+          setHasPlayedOddOneOutToday(true);
+        });
+    }
+    setOddOneOutScore(0);
+    setOddOneOutStreak(0);
+    setOddOneOutLives(3);
+    setOddOneOutAnsweredCount(0);
+    setUsedOddAnswers([]);
+    oddTotalCorrectRef.current = 0;
+    oddTotalTimeLeftRef.current = 0;
+    
+    setIsOddOneOutLoading(true);
+    generateOddOneOutQuestion(oddOneOutDifficulty, []).then((q) => {
+      setCurrentOddQuestion(q);
+      
+      const initialTime = oddOneOutDifficulty === "easy" ? 15 : oddOneOutDifficulty === "medium" ? 12 : 8;
+      setOddOneOutTimeLeft(initialTime);
+      
+      setSelectedOddAnswer(null);
+      setIsCorrectOddSelected(null);
+      setIsOddOneOutActive(true);
+      setOddOneOutView("game");
+      setIsOddOneOutLoading(false);
+    }).catch((err) => {
+      console.error(err);
+      setIsOddOneOutLoading(false);
+      onShowToast("Failed to fetch questions from the internet. Please try again.", "error");
+    });
+  };
+
+  const endOddOneOutGame = async (finalScore = oddOneOutScore, lives = oddLivesRef.current, answered = oddAnsweredRef.current) => {
+    setIsOddOneOutActive(false);
+    setOddOneOutView("results");
+    
+    const totalCorrect = oddTotalCorrectRef.current;
+    const totalTimeLeft = oddTotalTimeLeftRef.current;
+    const maxTime = oddOneOutDifficulty === "easy" ? 15 : oddOneOutDifficulty === "medium" ? 12 : 8;
+    const averageTimeLeft = totalCorrect > 0 ? totalTimeLeft / totalCorrect : 0;
+    const speedFactor = averageTimeLeft / maxTime;
+    const speedMultiplier = 1 + speedFactor * 0.5;
+    const livesRemainingBonus = 1 + (Math.max(0, lives) / 3) * 0.2;
+    const baseXPPerCorrect = oddOneOutDifficulty === "easy" ? 3 : oddOneOutDifficulty === "medium" ? 5 : 8;
+    const difficultyMultiplier = oddOneOutDifficulty === "easy" ? 1.0 : oddOneOutDifficulty === "medium" ? 1.3 : 1.7;
+    
+    const calculatedXP = Math.round(totalCorrect * baseXPPerCorrect * difficultyMultiplier * speedMultiplier * livesRemainingBonus);
+    const xpReward = totalCorrect > 0 ? Math.min(100, Math.max(5, calculatedXP)) : 0;
+    
+    setOddOneOutXpEarned(xpReward);
+
+    // Save to database
+    if (currentOddSessionIdRef.current) {
+      supabase
+        .from("game_sessions")
+        .update({
+          score: finalScore,
+          details: {
+            answered: answered,
+            difficulty: oddOneOutDifficulty,
+            questionsLimit: oddOneOutQuestionsLimit,
+            xpEarned: xpReward
+          }
+        })
+        .eq("id", currentOddSessionIdRef.current)
+        .then(({ error }) => {
+          if (error) console.error("Error updating odd one out session score:", error);
+        });
+    }
+
+    const newSession = {
+      date: new Date().toLocaleTimeString(),
+      score: finalScore,
+      answered: answered,
+      difficulty: oddOneOutDifficulty,
+      questionsLimit: oddOneOutQuestionsLimit,
+      xpEarned: xpReward
+    };
+    setOddOneOutHistory(prev => [newSession, ...prev]);
+    
+    if (xpReward > 0 && currentUser?.uid) {
+      try {
+        const { data: userData, error: fetchErr } = await supabase
+          .from("users")
+          .select("xp")
+          .eq("uid", currentUser.uid)
+          .maybeSingle();
+          
+        if (!fetchErr && userData) {
+          const currentXp = userData.xp || 0;
+          const newXp = currentXp + xpReward;
+          
+          const { error: updateErr } = await supabase
+            .from("users")
+            .update({
+              xp: newXp
+            })
+            .eq("uid", currentUser.uid);
+            
+          if (!updateErr) {
+            onShowToast(`Completed! Earned +${xpReward} XP!`, "success");
+            if (allLevels.length > 0) {
+              await checkAndTriggerLevelUp(currentXp, newXp, allLevels);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to pay out rewards:", err);
+      }
+    }
+  };
+
+  const quitOddOneOutGame = () => {
+    setIsOddOneOutActive(false);
+    setOddOneOutView("setup");
+  };
+
+  // Regex Detective game mechanics
+  const handleRegexTimeExpired = () => {
+    setIsRegexActive(false);
+    setIsCorrectRegexSelected(false);
+    setSelectedRegexAnswer(""); // empty represents timeout
+    
+    const nextLives = regexLivesRef.current - 1;
+    setRegexLives(nextLives);
+    setRegexStreak(0);
+    
+    const nextCount = regexAnsweredRef.current + 1;
+    setRegexAnsweredCount(nextCount);
+
+    let nextExcluded = usedRegexQuestionIdsRef.current;
+    if (regexQuestionRef.current) {
+      nextExcluded = [...nextExcluded, regexQuestionRef.current.id];
+      setUsedRegexQuestionIds(nextExcluded);
+    }
+
+    setTimeout(() => {
+      setSelectedRegexAnswer(null);
+      setIsCorrectRegexSelected(null);
+
+      if (nextLives <= 0 || (regexQuestionsLimit > 0 && nextCount >= regexQuestionsLimit)) {
+        endRegexGame(regexScore, nextLives, nextCount);
+      } else {
+        setIsRegexLoading(true);
+        const q = generateRegexQuestion(regexDifficulty, nextExcluded);
+        setCurrentRegexQuestion(q);
+        const initialTime = regexDifficulty === "easy" ? 25 : regexDifficulty === "medium" ? 20 : 15;
+        setRegexTimeLeft(initialTime);
+        setIsRegexActive(true);
+        setIsRegexLoading(false);
+      }
+    }, 2000);
+  };
+
+  const handleRegexAnswerSelect = (answer: string) => {
+    if (selectedRegexAnswer !== null) return;
+    
+    setIsRegexActive(false);
+    setSelectedRegexAnswer(answer);
+    
+    const isCorrect = answer === currentRegexQuestion?.answer;
+    setIsCorrectRegexSelected(isCorrect);
+    
+    let nextScore = regexScore;
+    let nextStreak = regexStreak;
+    let nextLives = regexLives;
+    
+    if (isCorrect) {
+      regexTotalCorrectRef.current += 1;
+      regexTotalTimeLeftRef.current += regexTimeLeft;
+      nextStreak += 1;
+      setRegexStreak(nextStreak);
+      
+      const diffMultiplier = regexDifficulty === "easy" ? 15 : regexDifficulty === "medium" ? 25 : 40;
+      const streakMultiplier = Math.min(3, 1 + Math.floor(nextStreak / 3) * 0.5);
+      const points = Math.round(diffMultiplier * streakMultiplier);
+      nextScore += points;
+      setRegexScore(nextScore);
+    } else {
+      nextStreak = 0;
+      setRegexStreak(0);
+      nextLives -= 1;
+      setRegexLives(nextLives);
+    }
+    
+    const nextCount = regexAnsweredCount + 1;
+    setRegexAnsweredCount(nextCount);
+
+    let nextExcluded = usedRegexQuestionIdsRef.current;
+    if (currentRegexQuestion) {
+      nextExcluded = [...nextExcluded, currentRegexQuestion.id];
+      setUsedRegexQuestionIds(nextExcluded);
+    }
+    
+    setTimeout(async () => {
+      setSelectedRegexAnswer(null);
+      setIsCorrectRegexSelected(null);
+      
+      if (nextLives <= 0 || (regexQuestionsLimit > 0 && nextCount >= regexQuestionsLimit)) {
+        await endRegexGame(nextScore, nextLives, nextCount);
+      } else {
+        setIsRegexLoading(true);
+        const q = generateRegexQuestion(regexDifficulty, nextExcluded);
+        setCurrentRegexQuestion(q);
+        const initialTime = regexDifficulty === "easy" ? 25 : regexDifficulty === "medium" ? 20 : 15;
+        setRegexTimeLeft(initialTime);
+        setIsRegexActive(true);
+        setIsRegexLoading(false);
+      }
+    }, 2000);
+  };
+
+  const startRegexGame = () => {
+    if (currentUser?.uid) {
+      supabase
+        .from("game_sessions")
+        .insert({
+          user_id: currentUser.uid,
+          game_type: "regex_detective",
+          played_at: new Date().toISOString()
+        })
+        .select("id")
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error) console.error("Error saving regex session:", error);
+          if (data) setCurrentRegexSessionId(data.id);
+          setHasPlayedRegexToday(true);
+        });
+    }
+    setRegexScore(0);
+    setRegexStreak(0);
+    setRegexLives(3);
+    setRegexAnsweredCount(0);
+    setUsedRegexQuestionIds([]);
+    regexTotalCorrectRef.current = 0;
+    regexTotalTimeLeftRef.current = 0;
+    
+    setIsRegexLoading(true);
+    const q = generateRegexQuestion(regexDifficulty, []);
+    setCurrentRegexQuestion(q);
+    
+    const initialTime = regexDifficulty === "easy" ? 25 : regexDifficulty === "medium" ? 20 : 15;
+    setRegexTimeLeft(initialTime);
+    
+    setSelectedRegexAnswer(null);
+    setIsCorrectRegexSelected(null);
+    setIsRegexActive(true);
+    setRegexView("game");
+    setIsRegexLoading(false);
+  };
+
+  const endRegexGame = async (finalScore = regexScore, lives = regexLivesRef.current, answered = regexAnsweredRef.current) => {
+    setIsRegexActive(false);
+    setRegexView("results");
+    
+    const totalCorrect = regexTotalCorrectRef.current;
+    const totalTimeLeft = regexTotalTimeLeftRef.current;
+    const maxTime = regexDifficulty === "easy" ? 25 : regexDifficulty === "medium" ? 20 : 15;
+    const averageTimeLeft = totalCorrect > 0 ? totalTimeLeft / totalCorrect : 0;
+    const speedFactor = averageTimeLeft / maxTime;
+    const speedMultiplier = 1 + speedFactor * 0.5;
+    const livesRemainingBonus = 1 + (Math.max(0, lives) / 3) * 0.2;
+    const baseXPPerCorrect = regexDifficulty === "easy" ? 4 : regexDifficulty === "medium" ? 7 : 11;
+    const difficultyMultiplier = regexDifficulty === "easy" ? 1.0 : regexDifficulty === "medium" ? 1.3 : 1.7;
+    
+    const calculatedXP = Math.round(totalCorrect * baseXPPerCorrect * difficultyMultiplier * speedMultiplier * livesRemainingBonus);
+    const xpReward = totalCorrect > 0 ? Math.min(100, Math.max(5, calculatedXP)) : 0;
+    
+    setRegexXpEarned(xpReward);
+
+    if (currentRegexSessionIdRef.current) {
+      supabase
+        .from("game_sessions")
+        .update({
+          score: finalScore,
+          details: {
+            answered: answered,
+            difficulty: regexDifficulty,
+            questionsLimit: regexQuestionsLimit,
+            xpEarned: xpReward
+          }
+        })
+        .eq("id", currentRegexSessionIdRef.current)
+        .then(({ error }) => {
+          if (error) console.error("Error updating regex session score:", error);
+        });
+    }
+
+    const newSession = {
+      date: new Date().toLocaleTimeString(),
+      score: finalScore,
+      answered: answered,
+      difficulty: regexDifficulty,
+      questionsLimit: regexQuestionsLimit,
+      xpEarned: xpReward
+    };
+    setRegexHistory(prev => [newSession, ...prev]);
+    
+    if (xpReward > 0 && currentUser?.uid) {
+      try {
+        const { data: userData, error: fetchErr } = await supabase
+          .from("users")
+          .select("xp")
+          .eq("uid", currentUser.uid)
+          .maybeSingle();
+          
+        if (!fetchErr && userData) {
+          const currentXp = userData.xp || 0;
+          const newXp = currentXp + xpReward;
+          
+          const { error: updateErr } = await supabase
+            .from("users")
+            .update({
+              xp: newXp
+            })
+            .eq("uid", currentUser.uid);
+            
+          if (!updateErr) {
+            onShowToast(`Completed! Earned +${xpReward} XP!`, "success");
+            if (allLevels.length > 0) {
+              await checkAndTriggerLevelUp(currentXp, newXp, allLevels);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to pay out rewards:", err);
+      }
+    }
+  };
+
+  const quitRegexGame = () => {
+    setIsRegexActive(false);
+    setRegexView("setup");
+  };
+
+  // Auto-focus input when entering game
+  useEffect(() => {
+    if (typingView === "game" && typingInputRef.current) {
+      const focusTimer = setTimeout(() => {
+        typingInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(focusTimer);
+    }
+  }, [typingView]);
+
 
   // Profile modal state
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -1539,6 +2481,40 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           <div className="brand-badge">User Workspace</div>
         </div>
         <div className="nav-user-info">
+          {/* Typing History Button */}
+          <button
+            type="button"
+            style={{ 
+              marginRight: '0.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            title="Typing Practice History"
+            onClick={() => setIsTypingHistoryOpen(true)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.borderColor = 'var(--border-light)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--text-secondary)';
+              e.currentTarget.style.borderColor = 'var(--border-color)';
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </button>
+          
           <button
             type="button"
             className="daily-reward-btn"
@@ -1726,6 +2702,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
               Quests
+            </button>
+            <button
+              className={`sidebar-nav-item ${activeTab === "hub" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("hub");
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+              </svg>
+              Hub
             </button>
             {userProfile?.role === "admin" && onNavigateToAdmin && (
               <button
@@ -2934,6 +3923,1161 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </>
           )}
 
+          {activeTab === "hub" && (
+            <>
+              <style>{`
+                .char-correct {
+                  color: #10b981 !important;
+                }
+                .char-incorrect {
+                  color: #ef4444 !important;
+                  background-color: rgba(239, 68, 68, 0.2) !important;
+                  text-decoration: underline;
+                }
+                .char-current {
+                  color: #ffffff !important;
+                  background-color: rgba(99, 102, 241, 0.3) !important;
+                  border-bottom: 2px solid var(--primary);
+                  animation: cursorBlink 0.8s infinite alternate;
+                }
+                .char-pending {
+                  color: var(--text-muted) !important;
+                }
+                @keyframes cursorBlink {
+                  0% { border-bottom-color: transparent; }
+                  100% { border-bottom-color: var(--primary); }
+                }
+                .typing-scrollbar::-webkit-scrollbar {
+                  width: 6px;
+                }
+                .typing-scrollbar::-webkit-scrollbar-thumb {
+                  background-color: var(--border-color);
+                  border-radius: 3px;
+                }
+                @keyframes shake {
+                  0%, 100% { transform: translateX(0); }
+                  20%, 60% { transform: translateX(-6px); }
+                  40%, 80% { transform: translateX(6px); }
+                }
+                .shake-wrong {
+                  animation: shake 0.4s ease-in-out;
+                  border-color: #ef4444 !important;
+                  background-color: rgba(239, 68, 68, 0.1) !important;
+                  color: #ef4444 !important;
+                }
+                .pulse-right {
+                  border-color: #10b981 !important;
+                  background-color: rgba(16, 185, 129, 0.15) !important;
+                  box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+                  color: #10b981 !important;
+                }
+                .option-btn {
+                  background: var(--bg-surface-elevated);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-primary);
+                  padding: 1.25rem;
+                  font-size: 1.1rem;
+                  font-weight: 600;
+                  border-radius: 12px;
+                  cursor: pointer;
+                  transition: all 0.2s ease;
+                  text-align: center;
+                }
+                .option-btn:hover:not(:disabled) {
+                  border-color: var(--primary);
+                  transform: translateY(-2px);
+                  box-shadow: 0 6px 12px rgba(99, 102, 241, 0.15);
+                }
+                .timer-bar-container {
+                  width: 100%;
+                  height: 8px;
+                  background: rgba(255,255,255,0.05);
+                  border-radius: 4px;
+                  overflow: hidden;
+                  margin-top: 0.5rem;
+                }
+                .timer-bar-fill {
+                  height: 100%;
+                  background: linear-gradient(90deg, var(--primary), var(--secondary));
+                  transition: width 0.1s linear;
+                }
+                .streak-badge {
+                  background: linear-gradient(135deg, #f59e0b, #ef4444);
+                  color: #fff;
+                  padding: 0.15rem 0.5rem;
+                  border-radius: 99px;
+                  font-weight: 800;
+                  font-size: 0.7rem;
+                  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+                }
+                .lives-display {
+                  display: flex;
+                  gap: 0.25rem;
+                  font-size: 1.3rem;
+                }
+              `}</style>
+
+              <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '1050px', margin: '0 auto', width: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    {hubActiveGame !== null && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          quitTypingPractice();
+                          quitOddOneOutGame();
+                          quitRegexGame();
+                          setHubActiveGame(null);
+                        }}
+                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                      >
+                        ← Back to Hub
+                      </button>
+                    )}
+                    <div>
+                      <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>Sydions Hub</h2>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Train your skills and explore mini-games.</p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {hubActiveGame === "typing" && typingView !== "setup" && (
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        onClick={quitTypingPractice}
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+                      >
+                        Quit Practice
+                      </button>
+                    )}
+                    {hubActiveGame === "odd_one_out" && oddOneOutView !== "setup" && (
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        onClick={quitOddOneOutGame}
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+                      >
+                        Quit Game
+                      </button>
+                    )}
+                    {hubActiveGame === "regex" && regexView !== "setup" && (
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        onClick={quitRegexGame}
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+                      >
+                        Quit Game
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {hubActiveGame === null ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+                    <SpotlightCard 
+                      style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', cursor: 'pointer', textAlign: 'center', background: 'var(--bg-surface)' }}
+                      onClick={() => setHubActiveGame("typing")}
+                    >
+                      <div style={{ fontSize: '3rem' }}>⌨️</div>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Typing Flow</h3>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                        Improve your typing speed and accuracy with infinite dynamic sentences.
+                      </p>
+                      <div style={{ marginTop: 'auto', color: 'var(--primary-hover)', fontWeight: 700, fontSize: '0.85rem' }}>
+                        Start Training →
+                      </div>
+                    </SpotlightCard>
+
+                    <SpotlightCard 
+                      style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', cursor: 'pointer', textAlign: 'center', background: 'var(--bg-surface)' }}
+                      onClick={() => setHubActiveGame("odd_one_out")}
+                    >
+                      <div style={{ fontSize: '3rem' }}>🔍</div>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Odd One Out</h3>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                        Spot the semantic intruder from four choices. Train logic under ticking time limits!
+                      </p>
+                      <div style={{ marginTop: 'auto', color: 'var(--primary-hover)', fontWeight: 700, fontSize: '0.85rem' }}>
+                        Start Playing →
+                      </div>
+                    </SpotlightCard>
+
+                    <SpotlightCard 
+                      style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', cursor: 'pointer', textAlign: 'center', background: 'var(--bg-surface)' }}
+                      onClick={() => setHubActiveGame("regex")}
+                    >
+                      <div style={{ fontSize: '3rem' }}>🕵️‍♂️</div>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Regex Detective</h3>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                        Find the correct Regular Expression pattern to match target rules and validate test cases live!
+                      </p>
+                      <div style={{ marginTop: 'auto', color: 'var(--primary-hover)', fontWeight: 700, fontSize: '0.85rem' }}>
+                        Start Playing →
+                      </div>
+                    </SpotlightCard>
+                  </div>
+                ) : hubActiveGame === "typing" ? (
+                  <>
+                    {typingView === "setup" && (
+                      <SpotlightCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div style={{ textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
+                          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>⌨️</div>
+                          <h3 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Typing Flow</h3>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                            Improve your writing speed with infinite sentence paragraphs generated on-the-fly. Choose a mode below to start.
+                          </p>
+                        </div>
+
+                        {hasPlayedTypingToday && (
+                          <div style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '12px',
+                            padding: '1rem',
+                            color: '#ef4444',
+                            fontSize: '0.85rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            margin: '0 auto',
+                            maxWidth: '500px',
+                            width: '100%'
+                          }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="8" x2="12" y2="12" />
+                              <line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                            <div style={{ textAlign: 'left' }}>
+                              <strong style={{ display: 'block', fontWeight: 700 }}>Daily Session Completed</strong>
+                              <span style={{ color: 'var(--text-muted)' }}>You have already played Typing Flow today. Limit is 1 session per day.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'center', marginTop: '1rem' }}>
+                          {/* Time Select */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '220px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Session Duration</span>
+                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                              {[1, 2, 3].map((t) => (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  className={`btn ${typingTimeLimit === t && !isCustomTime ? 'btn-primary' : 'btn-secondary'}`}
+                                  disabled={hasPlayedTypingToday}
+                                  onClick={() => {
+                                    setTypingTimeLimit(t);
+                                    setIsCustomTime(false);
+                                  }}
+                                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', height: 'auto' }}
+                                >
+                                  {t} Min
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                className={`btn ${isCustomTime ? 'btn-primary' : 'btn-secondary'}`}
+                                disabled={hasPlayedTypingToday}
+                                onClick={() => {
+                                  setIsCustomTime(true);
+                                  setTypingTimeLimit(5); // default custom
+                                }}
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', height: 'auto' }}
+                              >
+                                Custom
+                              </button>
+                            </div>
+                            {isCustomTime && (
+                              <div style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <input
+                                  type="number"
+                                  className="form-control"
+                                  value={typingTimeLimit}
+                                  disabled={hasPlayedTypingToday}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                                    setTypingTimeLimit(val);
+                                  }}
+                                  min={1}
+                                  style={{ width: '80px', padding: '0.25rem 0.5rem', fontSize: '0.8rem', height: 'auto' }}
+                                />
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Minutes</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Difficulty Select */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '240px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Difficulty</span>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              {(["easy", "medium", "hard"] as const).map((diff) => (
+                                <button
+                                  key={diff}
+                                  type="button"
+                                  className={`btn ${typingDifficulty === diff ? 'btn-primary' : 'btn-secondary'}`}
+                                  disabled={hasPlayedTypingToday}
+                                  onClick={() => setTypingDifficulty(diff)}
+                                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', textTransform: 'capitalize' }}
+                                >
+                                  {diff}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={startTypingPractice}
+                          disabled={hasPlayedTypingToday}
+                          style={{
+                            margin: '1.5rem auto 0 auto',
+                            padding: '0.8rem 3rem',
+                            fontSize: '1rem',
+                            fontWeight: 700,
+                            borderRadius: '12px',
+                            maxWidth: '300px',
+                            width: '100%',
+                            background: hasPlayedTypingToday ? 'var(--bg-surface-elevated)' : 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                            border: 'none',
+                            color: hasPlayedTypingToday ? 'var(--text-muted)' : '#fff',
+                            boxShadow: hasPlayedTypingToday ? 'none' : '0 0 20px var(--primary-glow)',
+                            cursor: hasPlayedTypingToday ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Start Session 🚀
+                        </button>
+                      </SpotlightCard>
+                    )}
+
+                    {typingView === "game" && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {/* Live Stats Row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Time Remaining</div>
+                            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: typingTimeLeft <= 10 ? 'var(--danger)' : 'var(--text-primary)', marginTop: '0.25rem' }}>
+                              {Math.floor(typingTimeLeft / 60)}:{(typingTimeLeft % 60).toString().padStart(2, '0')}
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Speed</div>
+                            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary-hover)', marginTop: '0.25rem' }}>
+                              {typingStats.wpm} <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-muted)' }}>WPM</span>
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Accuracy</div>
+                            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: typingStats.accuracy >= 90 ? 'var(--success)' : 'var(--accent-gold)', marginTop: '0.25rem' }}>
+                              {typingStats.accuracy}%
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mistakes</div>
+                            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--danger)', marginTop: '0.25rem' }}>
+                              {typingStats.mistakes}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Typing Workspace */}
+                        <div style={{ position: 'relative', width: '100%' }}>
+                          <input
+                            ref={typingInputRef}
+                            type="text"
+                            style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+                            value={typingInput}
+                            onChange={(e) => handleTypingInput(e.target.value)}
+                            autoFocus
+                          />
+                          
+                          <div 
+                            ref={typingContainerRef}
+                            className="typing-scrollbar"
+                            style={{ 
+                              height: '240px', 
+                              overflowY: 'hidden', 
+                              background: 'rgba(255, 255, 255, 0.02)', 
+                              borderRadius: '16px', 
+                              border: '1px solid var(--border-color)', 
+                              padding: '1.5rem', 
+                              cursor: 'text',
+                              lineHeight: 1.6
+                            }}
+                            onClick={() => typingInputRef.current?.focus()}
+                          >
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 1px', fontSize: '1.4rem', fontFamily: 'monospace', fontWeight: 500 }}>
+                              {typingText.split('').map((char, index) => {
+                                let state = 'pending';
+                                if (index < typingInput.length) {
+                                  state = typingInput[index] === char ? 'correct' : 'incorrect';
+                                } else if (index === typingInput.length) {
+                                  state = 'current';
+                                }
+
+                                return (
+                                  <span
+                                    key={index}
+                                    ref={state === 'current' ? activeCharRef : null}
+                                    className={`char-${state}`}
+                                  >
+                                    {char === ' ' ? '\u00A0' : char}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Bottom Instruction overlay */}
+                          {!isTypingActive && typingInput.length === 0 && (
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                              <p style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '1.25rem', margin: 0, animation: 'pulse 1.5s infinite' }}>
+                                Start typing to begin...
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {typingView === "results" && (
+                      <SpotlightCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center', maxWidth: '600px', margin: '0 auto', width: '100%' }}>
+                        <div>
+                          <div style={{ fontSize: '3rem' }}>🏆</div>
+                          <h3 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0.5rem 0 0 0', color: 'var(--text-primary)' }}>Session Complete!</h3>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Here is how you performed:</p>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem', margin: '1rem 0' }}>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary-hover)' }}>{typingStats.wpm}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Words Per Minute</div>
+                          </div>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--success)' }}>{typingStats.accuracy}%</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Accuracy</div>
+                          </div>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--danger)' }}>{typingStats.mistakes}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Total Errors</div>
+                          </div>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{typingStats.wordsTyped}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Words Typed</div>
+                          </div>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-gold)' }}>+{typingXpEarned} XP</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Leveling Reward</div>
+                          </div>
+                        </div>
+
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: '0 0 1rem 0' }}>
+                          {typingStats.wpm >= 60 ? "🚀 Speed Demon! Excellent control and lightning speed." : 
+                           typingStats.wpm >= 40 ? "✨ Fantastic! You have a highly proficient typing rate." : 
+                           typingStats.wpm >= 25 ? "👍 Good job! Keep practicing to build higher muscle memory." : 
+                           "🌱 Keep going! Speed builds slowly with regular practice."}
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setTypingView("setup")}
+                            style={{ padding: '0.6rem 2rem', fontSize: '0.85rem' }}
+                          >
+                            Adjust Mode
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={startTypingPractice}
+                            disabled={hasPlayedTypingToday}
+                            style={{
+                              padding: '0.6rem 2rem',
+                              fontSize: '0.85rem',
+                              background: hasPlayedTypingToday ? 'var(--bg-surface-elevated)' : undefined,
+                              borderColor: hasPlayedTypingToday ? 'var(--border-color)' : undefined,
+                              color: hasPlayedTypingToday ? 'var(--text-muted)' : undefined,
+                              cursor: hasPlayedTypingToday ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            Try Again 🔁
+                          </button>
+                        </div>
+                      </SpotlightCard>
+                    )}
+                  </>
+                ) : hubActiveGame === "odd_one_out" ? (
+                  <>
+                    {oddOneOutView === "setup" && (
+                      <SpotlightCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div style={{ textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
+                          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔍</div>
+                          <h3 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Odd One Out</h3>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                            Find the odd word/phrase that doesn't fit the semantic group. Correct answers build streaks, while wrong answers or timeouts cost a life!
+                          </p>
+                        </div>
+
+                        {hasPlayedOddOneOutToday && (
+                          <div style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '12px',
+                            padding: '1rem',
+                            color: '#ef4444',
+                            fontSize: '0.85rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            margin: '0 auto',
+                            maxWidth: '500px',
+                            width: '100%'
+                          }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="8" x2="12" y2="12" />
+                              <line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                            <div style={{ textAlign: 'left' }}>
+                              <strong style={{ display: 'block', fontWeight: 700 }}>Daily Session Completed</strong>
+                              <span style={{ color: 'var(--text-muted)' }}>You have already played Odd One Out today. Limit is 1 session per day.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'center', marginTop: '1rem' }}>
+                          {/* Difficulty Select */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '240px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Difficulty Level</span>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              {(["easy", "medium", "hard"] as const).map((diff) => (
+                                <button
+                                  key={diff}
+                                  type="button"
+                                  className={`btn ${oddOneOutDifficulty === diff ? 'btn-primary' : 'btn-secondary'}`}
+                                  disabled={hasPlayedOddOneOutToday}
+                                  onClick={() => setOddOneOutDifficulty(diff)}
+                                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', textTransform: 'capitalize' }}
+                                >
+                                  {diff}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Questions Limit Select */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '240px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Game Mode</span>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              {[10, 20, 0].map((limit) => (
+                                <button
+                                  key={limit}
+                                  type="button"
+                                  className={`btn ${oddOneOutQuestionsLimit === limit ? 'btn-primary' : 'btn-secondary'}`}
+                                  disabled={hasPlayedOddOneOutToday}
+                                  onClick={() => setOddOneOutQuestionsLimit(limit)}
+                                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem' }}
+                                >
+                                  {limit === 0 ? "Endless" : `${limit} Quests`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={startOddOneOutGame}
+                          disabled={hasPlayedOddOneOutToday}
+                          style={{
+                            margin: '1.5rem auto 0 auto',
+                            padding: '0.8rem 3rem',
+                            fontSize: '1rem',
+                            fontWeight: 700,
+                            borderRadius: '12px',
+                            maxWidth: '300px',
+                            width: '100%',
+                            background: hasPlayedOddOneOutToday ? 'var(--bg-surface-elevated)' : 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                            border: 'none',
+                            color: hasPlayedOddOneOutToday ? 'var(--text-muted)' : '#fff',
+                            boxShadow: hasPlayedOddOneOutToday ? 'none' : '0 0 20px var(--primary-glow)',
+                            cursor: hasPlayedOddOneOutToday ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Start Game 🚀
+                        </button>
+                      </SpotlightCard>
+                    )}
+
+                    {oddOneOutView === "game" && (isOddOneOutLoading || !currentOddQuestion) && (
+                      <SpotlightCard style={{ padding: '3rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center', alignItems: 'center', justifyContent: 'center', minHeight: '350px' }}>
+                        <div className="spinner" style={{
+                          width: '50px',
+                          height: '50px',
+                          border: '4px solid rgba(255, 255, 255, 0.1)',
+                          borderTop: '4px solid var(--primary)',
+                          borderRadius: '50%',
+                          animation: 'spin 1s linear infinite'
+                        }}></div>
+                        <style>{`
+                          @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                          }
+                        `}</style>
+                        <h3 style={{ margin: '1.5rem 0 0 0', color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>Generating Question...</h3>
+                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Fetching semantic word groups from the internet</p>
+                      </SpotlightCard>
+                    )}
+
+                    {oddOneOutView === "game" && !isOddOneOutLoading && currentOddQuestion && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {/* Game Status Header */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Quest Progression</div>
+                            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.25rem' }}>
+                              {oddOneOutQuestionsLimit === 0 ? `Quest ${oddOneOutAnsweredCount + 1}` : `Quest ${oddOneOutAnsweredCount + 1} / ${oddOneOutQuestionsLimit}`}
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Lives</div>
+                            <div className="lives-display" style={{ display: 'flex', justifyContent: 'center', marginTop: '0.25rem' }}>
+                              {[...Array(3)].map((_, idx) => (
+                                <span key={idx} style={{ color: idx < oddOneOutLives ? '#ef4444' : 'rgba(255,255,255,0.1)', transition: 'color 0.2s' }}>❤️</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Streak</div>
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.35rem', marginTop: '0.25rem' }}>
+                              <span style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent-gold)' }}>{oddOneOutStreak}</span>
+                              {oddOneOutStreak >= 3 && (
+                                <span className="streak-badge">
+                                  {Math.min(3, 1 + Math.floor(oddOneOutStreak / 3) * 0.5)}x
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Score</div>
+                            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary-hover)', marginTop: '0.25rem' }}>
+                              {oddOneOutScore}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Ticking countdown bar */}
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Solve timer</span>
+                            <span style={{ fontWeight: 'bold', color: oddOneOutTimeLeft <= 3 ? '#ef4444' : 'var(--text-primary)' }}>
+                              {oddOneOutTimeLeft}s
+                            </span>
+                          </div>
+                          <div className="timer-bar-container">
+                            <div 
+                              className="timer-bar-fill"
+                              style={{ 
+                                width: `${(oddOneOutTimeLeft / (oddOneOutDifficulty === "easy" ? 15 : oddOneOutDifficulty === "medium" ? 12 : 8)) * 100}%`,
+                                backgroundColor: oddOneOutTimeLeft <= 3 ? '#ef4444' : undefined
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Main Question Card */}
+                        <SpotlightCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: 'var(--bg-surface)', position: 'relative' }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.8rem', background: 'rgba(99,102,241,0.1)', color: 'var(--primary-hover)', padding: '0.25rem 0.75rem', borderRadius: '99px', fontWeight: 600 }}>
+                              Topic: {currentOddQuestion.category}
+                            </span>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: '1rem 0 0.5rem 0', color: 'var(--text-primary)' }}>
+                              Which one is the Odd One Out?
+                            </h2>
+                          </div>
+
+                          {/* Choices Grid */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+                            {currentOddQuestion.options.map((opt) => {
+                              const isSelected = selectedOddAnswer === opt;
+                              const isCorrectAnswer = opt === currentOddQuestion.answer;
+                              let btnClass = "option-btn";
+                              
+                              if (selectedOddAnswer !== null) {
+                                if (isCorrectAnswer) {
+                                  btnClass += " pulse-right";
+                                } else if (isSelected) {
+                                  btnClass += " shake-wrong";
+                                }
+                              }
+
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  className={btnClass}
+                                  onClick={() => handleOddAnswerSelect(opt)}
+                                  disabled={selectedOddAnswer !== null}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Explanation Card */}
+                          {selectedOddAnswer !== null && (
+                            <div style={{ 
+                              marginTop: '1rem', 
+                              padding: '1rem', 
+                              borderRadius: '8px', 
+                              border: '1px solid',
+                              borderColor: isCorrectOddSelected ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)',
+                              background: isCorrectOddSelected ? 'rgba(16,185,129,0.03)' : 'rgba(239,68,68,0.03)',
+                              animation: 'fadeIn 0.3s ease-out'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                <span style={{ fontSize: '1.1rem' }}>
+                                  {isCorrectOddSelected ? "✨ Correct!" : selectedOddAnswer === "" ? "⏰ Time's Up!" : "❌ Incorrect"}
+                                </span>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                {currentOddQuestion.explanation}
+                              </p>
+                            </div>
+                          )}
+                        </SpotlightCard>
+                      </div>
+                    )}
+
+                    {oddOneOutView === "results" && (
+                      <SpotlightCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center', maxWidth: '600px', margin: '0 auto', width: '100%' }}>
+                        <div>
+                          <div style={{ fontSize: '3rem' }}>🏆</div>
+                          <h3 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0.5rem 0 0 0', color: 'var(--text-primary)' }}>Session Completed!</h3>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Here is your performance breakdown:</p>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', margin: '1rem 0' }}>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary-hover)' }}>{oddOneOutScore}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Final Score</div>
+                          </div>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--success)' }}>{oddOneOutAnsweredCount}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Quests Solved</div>
+                          </div>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
+                              +{oddOneOutXpEarned} XP
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Leveling Reward</div>
+                          </div>
+                        </div>
+
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: '0 0 1rem 0', lineHeight: 1.4 }}>
+                          {oddOneOutScore >= 150 ? "🧠 Intellectual Mastermind! Exceptional logic and speed." : 
+                           oddOneOutScore >= 80 ? "✨ Fantastic! You have a highly analytical mind." : 
+                           oddOneOutScore >= 30 ? "👍 Good job! Keep practicing to train your brain." : 
+                           "🌱 Keep playing! Analytical skills build with regular practice."}
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setOddOneOutView("setup")}
+                            style={{ padding: '0.6rem 2rem', fontSize: '0.85rem' }}
+                          >
+                            Adjust Settings
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={startOddOneOutGame}
+                            disabled={hasPlayedOddOneOutToday}
+                            style={{
+                              padding: '0.6rem 2rem',
+                              fontSize: '0.85rem',
+                              background: hasPlayedOddOneOutToday ? 'var(--bg-surface-elevated)' : undefined,
+                              borderColor: hasPlayedOddOneOutToday ? 'var(--border-color)' : undefined,
+                              color: hasPlayedOddOneOutToday ? 'var(--text-muted)' : undefined,
+                              cursor: hasPlayedOddOneOutToday ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            Play Again 🔁
+                          </button>
+                        </div>
+                      </SpotlightCard>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {regexView === "setup" && (
+                      <SpotlightCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div style={{ textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
+                          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🕵️‍♂️</div>
+                          <h3 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Regex Detective</h3>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                            Analyze the matching rules and live test cases to identify the correct Regular Expression pattern. Work quickly before the timer expires!
+                          </p>
+                        </div>
+
+                        {hasPlayedRegexToday && (
+                          <div style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '12px',
+                            padding: '1rem',
+                            color: '#ef4444',
+                            fontSize: '0.85rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            margin: '0 auto',
+                            maxWidth: '500px',
+                            width: '100%'
+                          }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="8" x2="12" y2="12" />
+                              <line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                            <div style={{ textAlign: 'left' }}>
+                              <strong style={{ display: 'block', fontWeight: 700 }}>Daily Session Completed</strong>
+                              <span style={{ color: 'var(--text-muted)' }}>You have already played Regex Detective today. Limit is 1 session per day.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'center', marginTop: '1rem' }}>
+                          {/* Difficulty Select */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '240px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Difficulty Level</span>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              {(["easy", "medium", "hard"] as const).map((diff) => (
+                                <button
+                                  key={diff}
+                                  type="button"
+                                  className={`btn ${regexDifficulty === diff ? 'btn-primary' : 'btn-secondary'}`}
+                                  disabled={hasPlayedRegexToday}
+                                  onClick={() => setRegexDifficulty(diff)}
+                                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', textTransform: 'capitalize' }}
+                                >
+                                  {diff}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Questions Limit Select */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '240px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Game Mode</span>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              {[10, 20, 0].map((limit) => (
+                                <button
+                                  key={limit}
+                                  type="button"
+                                  className={`btn ${regexQuestionsLimit === limit ? 'btn-primary' : 'btn-secondary'}`}
+                                  disabled={hasPlayedRegexToday}
+                                  onClick={() => setRegexQuestionsLimit(limit)}
+                                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem' }}
+                                >
+                                  {limit === 0 ? "Endless" : `${limit} Quests`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={startRegexGame}
+                          disabled={hasPlayedRegexToday}
+                          style={{
+                            margin: '1.5rem auto 0 auto',
+                            padding: '0.8rem 3rem',
+                            fontSize: '1rem',
+                            fontWeight: 700,
+                            borderRadius: '12px',
+                            maxWidth: '300px',
+                            width: '100%',
+                            background: hasPlayedRegexToday ? 'var(--bg-surface-elevated)' : 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                            border: 'none',
+                            color: hasPlayedRegexToday ? 'var(--text-muted)' : '#fff',
+                            boxShadow: hasPlayedRegexToday ? 'none' : '0 0 20px var(--primary-glow)',
+                            cursor: hasPlayedRegexToday ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Start Game 🚀
+                        </button>
+                      </SpotlightCard>
+                    )}
+
+                    {regexView === "game" && (isRegexLoading || !currentRegexQuestion) && (
+                      <SpotlightCard style={{ padding: '3rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center', alignItems: 'center', justifyContent: 'center', minHeight: '350px' }}>
+                        <div className="spinner" style={{
+                          width: '50px',
+                          height: '50px',
+                          border: '4px solid rgba(255, 255, 255, 0.1)',
+                          borderTop: '4px solid var(--primary)',
+                          borderRadius: '50%',
+                          animation: 'spin 1s linear infinite'
+                        }}></div>
+                        <style>{`
+                          @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                          }
+                        `}</style>
+                        <h3 style={{ margin: '1.5rem 0 0 0', color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>Generating Question...</h3>
+                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Fetching regex criteria patterns...</p>
+                      </SpotlightCard>
+                    )}
+
+                    {regexView === "game" && !isRegexLoading && currentRegexQuestion && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {/* Game Status Header */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Quest Progression</div>
+                            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.25rem' }}>
+                              {regexQuestionsLimit === 0 ? `Quest ${regexAnsweredCount + 1}` : `Quest ${regexAnsweredCount + 1} / ${regexQuestionsLimit}`}
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Lives</div>
+                            <div className="lives-display" style={{ display: 'flex', justifyContent: 'center', marginTop: '0.25rem' }}>
+                              {[...Array(3)].map((_, idx) => (
+                                <span key={idx} style={{ color: idx < regexLives ? '#ef4444' : 'rgba(255,255,255,0.1)', transition: 'color 0.2s' }}>❤️</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Streak</div>
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.35rem', marginTop: '0.25rem' }}>
+                              <span style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent-gold)' }}>{regexStreak}</span>
+                              {regexStreak >= 3 && (
+                                <span className="streak-badge">
+                                  {Math.min(3, 1 + Math.floor(regexStreak / 3) * 0.5)}x
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Score</div>
+                            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary-hover)', marginTop: '0.25rem' }}>
+                              {regexScore}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Ticking countdown bar */}
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Solve timer</span>
+                            <span style={{ fontWeight: 'bold', color: regexTimeLeft <= 4 ? '#ef4444' : 'var(--text-primary)' }}>
+                              {regexTimeLeft}s
+                            </span>
+                          </div>
+                          <div className="timer-bar-container">
+                            <div 
+                              className="timer-bar-fill"
+                              style={{ 
+                                width: `${(regexTimeLeft / (regexDifficulty === "easy" ? 25 : regexDifficulty === "medium" ? 20 : 15)) * 100}%`,
+                                backgroundColor: regexTimeLeft <= 4 ? '#ef4444' : undefined
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Main Question Card */}
+                        <SpotlightCard style={{ padding: '2.25rem', display: 'flex', flexDirection: 'column', gap: '1.75rem', background: 'var(--bg-surface)', position: 'relative' }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.8rem', background: 'rgba(99,102,241,0.1)', color: 'var(--primary-hover)', padding: '0.25rem 0.75rem', borderRadius: '99px', fontWeight: 600 }}>
+                              Level: {regexDifficulty.toUpperCase()}
+                            </span>
+                            <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: '1rem 0 0.25rem 0', color: 'var(--text-primary)' }}>
+                              {currentRegexQuestion.description}
+                            </h2>
+                          </div>
+
+                          {/* Test Cases Panel */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              Interactive Test Suite (Hover choices to test!)
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {currentRegexQuestion.testCases.map((tc, idx) => {
+                                const activePattern = selectedRegexAnswer || hoveredRegexAnswer;
+                                let testStatus = "pending";
+                                if (activePattern) {
+                                  try {
+                                    const r = new RegExp(activePattern);
+                                    const actualMatches = r.test(tc.text);
+                                    const matchesExpectation = actualMatches === tc.shouldMatch;
+                                    testStatus = matchesExpectation ? "success" : "fail";
+                                  } catch (e) {
+                                    testStatus = "fail";
+                                  }
+                                }
+                                return (
+                                  <div key={idx} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '0.5rem 0.75rem',
+                                    background: 'rgba(255,255,255,0.01)',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: '6px',
+                                    fontSize: '0.8rem'
+                                  }}>
+                                    <div>
+                                      <code style={{ background: 'rgba(255,255,255,0.06)', padding: '0.15rem 0.35rem', borderRadius: '4px', marginRight: '0.5rem', color: 'var(--accent-gold)', fontFamily: 'monospace', fontWeight: 600 }}>
+                                        "{tc.text}"
+                                      </code>
+                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                        ({tc.shouldMatch ? "should match" : "should not match"})
+                                      </span>
+                                    </div>
+                                    <div>
+                                      {testStatus === "pending" && <span style={{ color: 'var(--text-muted)' }}>⏳ Awaiting pattern</span>}
+                                      {testStatus === "success" && <span style={{ color: '#10b981', fontWeight: 600 }}>✓ Passes</span>}
+                                      {testStatus === "fail" && <span style={{ color: '#ef4444', fontWeight: 600 }}>✗ Fails</span>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Choices Grid */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
+                            {currentRegexQuestion.options.map((opt) => {
+                              const isSelected = selectedRegexAnswer === opt;
+                              const isCorrectAnswer = opt === currentRegexQuestion.answer;
+                              let btnClass = "option-btn";
+                              
+                              if (selectedRegexAnswer !== null) {
+                                if (isCorrectAnswer) {
+                                  btnClass += " pulse-right";
+                                } else if (isSelected) {
+                                  btnClass += " shake-wrong";
+                                }
+                              }
+
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  className={btnClass}
+                                  onClick={() => handleRegexAnswerSelect(opt)}
+                                  onMouseEnter={() => setHoveredRegexAnswer(opt)}
+                                  onMouseLeave={() => setHoveredRegexAnswer(null)}
+                                  disabled={selectedRegexAnswer !== null}
+                                  style={{ fontFamily: 'monospace', fontSize: '0.9rem', wordBreak: 'break-all', padding: '1rem 0.75rem' }}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Explanation Card */}
+                          {selectedRegexAnswer !== null && (
+                            <div style={{ 
+                              marginTop: '0.5rem', 
+                              padding: '1rem', 
+                              borderRadius: '8px', 
+                              border: '1px solid',
+                              borderColor: isCorrectRegexSelected ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)',
+                              background: isCorrectRegexSelected ? 'rgba(16,185,129,0.03)' : 'rgba(239,68,68,0.03)',
+                              animation: 'fadeIn 0.3s ease-out'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                <span style={{ fontSize: '1.1rem' }}>
+                                  {isCorrectRegexSelected ? "✨ Correct!" : selectedRegexAnswer === "" ? "⏰ Time's Up!" : "❌ Incorrect"}
+                                </span>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                {currentRegexQuestion.explanation}
+                              </p>
+                            </div>
+                          )}
+                        </SpotlightCard>
+                      </div>
+                    )}
+
+                    {regexView === "results" && (
+                      <SpotlightCard style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center', maxWidth: '600px', margin: '0 auto', width: '100%' }}>
+                        <div>
+                          <div style={{ fontSize: '3rem' }}>🏆</div>
+                          <h3 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0.5rem 0 0 0', color: 'var(--text-primary)' }}>Session Completed!</h3>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Here is your performance breakdown:</p>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', margin: '1rem 0' }}>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary-hover)' }}>{regexScore}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Final Score</div>
+                          </div>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--success)' }}>{regexAnsweredCount}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Quests Solved</div>
+                          </div>
+                          <div style={{ padding: '1rem', background: 'var(--bg-base)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
+                              +{regexXpEarned} XP
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Leveling Reward</div>
+                          </div>
+                        </div>
+
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: '0 0 1rem 0', lineHeight: 1.4 }}>
+                          {regexScore >= 160 ? "🕵️‍♂️ Master Detective! Exceptional regex comprehension." : 
+                           regexScore >= 90 ? "✨ Brilliant! You easily navigate pattern bounds." : 
+                           regexScore >= 40 ? "👍 Good job! Regular practice builds pattern memory." : 
+                           "🌱 Keep playing! Regular coding practices will sharpen regex logic."}
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setRegexView("setup")}
+                            style={{ padding: '0.6rem 2rem', fontSize: '0.85rem' }}
+                          >
+                            Adjust Settings
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={startRegexGame}
+                            disabled={hasPlayedRegexToday}
+                            style={{
+                              padding: '0.6rem 2rem',
+                              fontSize: '0.85rem',
+                              background: hasPlayedRegexToday ? 'var(--bg-surface-elevated)' : undefined,
+                              borderColor: hasPlayedRegexToday ? 'var(--border-color)' : undefined,
+                              color: hasPlayedRegexToday ? 'var(--text-muted)' : undefined,
+                              cursor: hasPlayedRegexToday ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            Play Again 🔁
+                          </button>
+                        </div>
+                      </SpotlightCard>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
         </main>
       </div>
 
@@ -3813,6 +5957,175 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
           )}
 
+        </div>
+      )}
+
+      {isTypingHistoryOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => setIsTypingHistoryOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Sydions Hub Session History
+              </div>
+              <button type="button" className="modal-close-btn" onClick={() => setIsTypingHistoryOpen(false)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            {/* Session History Tabs */}
+            <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-color)', padding: '0 1.5rem', marginBottom: '1rem' }}>
+              <button
+                type="button"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: historyActiveTab === "typing" ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: historyActiveTab === "typing" ? 'var(--text-primary)' : 'var(--text-muted)',
+                  padding: '0.5rem 0.25rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setHistoryActiveTab("typing")}
+              >
+                ⌨️ Typing Flow ({typingHistory.length})
+              </button>
+              <button
+                type="button"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: historyActiveTab === "odd_one_out" ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: historyActiveTab === "odd_one_out" ? 'var(--text-primary)' : 'var(--text-muted)',
+                  padding: '0.5rem 0.25rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setHistoryActiveTab("odd_one_out")}
+              >
+                🔍 Odd One Out ({oddOneOutHistory.length})
+              </button>
+              <button
+                type="button"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: historyActiveTab === "regex" ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: historyActiveTab === "regex" ? 'var(--text-primary)' : 'var(--text-muted)',
+                  padding: '0.5rem 0.25rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setHistoryActiveTab("regex")}
+              >
+                🕵️‍♂️ Regex Detective ({regexHistory.length})
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: '1rem' }}>
+              {historyActiveTab === "typing" ? (
+                typingHistory.length === 0 ? (
+                  <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    No typing sessions completed yet. Complete a session to see your performance here!
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="table" style={{ margin: 0 }}>
+                      <thead>
+                        <tr>
+                          <th>Time Completed</th>
+                          <th>Difficulty</th>
+                          <th>Speed</th>
+                          <th>Accuracy</th>
+                          <th>Mistakes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {typingHistory.map((item, idx) => (
+                          <tr key={idx}>
+                            <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.date}</td>
+                            <td style={{ textTransform: 'capitalize', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.difficulty}</td>
+                            <td style={{ fontWeight: 'bold', color: 'var(--primary-hover)', fontSize: '0.85rem' }}>{item.wpm} WPM</td>
+                            <td style={{ color: item.accuracy >= 90 ? 'var(--success)' : 'var(--accent-gold)', fontSize: '0.85rem' }}>{item.accuracy}%</td>
+                            <td style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>{item.mistakes}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              ) : historyActiveTab === "odd_one_out" ? (
+                oddOneOutHistory.length === 0 ? (
+                  <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    No Odd One Out sessions completed yet. Play a game to see your stats here!
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="table" style={{ margin: 0 }}>
+                      <thead>
+                        <tr>
+                          <th>Time Completed</th>
+                          <th>Difficulty</th>
+                          <th>Mode</th>
+                          <th>Quests Solved</th>
+                          <th>Score</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {oddOneOutHistory.map((item, idx) => (
+                          <tr key={idx}>
+                            <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.date}</td>
+                            <td style={{ textTransform: 'capitalize', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.difficulty}</td>
+                            <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                              {item.questionsLimit === 0 ? "Endless" : `${item.questionsLimit} Quests`}
+                            </td>
+                            <td style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{item.answered}</td>
+                            <td style={{ fontWeight: 'bold', color: 'var(--primary-hover)', fontSize: '0.85rem' }}>{item.score} pts</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              ) : (
+                regexHistory.length === 0 ? (
+                  <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    No Regex Detective sessions completed yet. Play a game to see your stats here!
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="table" style={{ margin: 0 }}>
+                      <thead>
+                        <tr>
+                          <th>Time Completed</th>
+                          <th>Difficulty</th>
+                          <th>Mode</th>
+                          <th>Quests Solved</th>
+                          <th>Score</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {regexHistory.map((item, idx) => (
+                          <tr key={idx}>
+                            <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.date}</td>
+                            <td style={{ textTransform: 'capitalize', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.difficulty}</td>
+                            <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                              {item.questionsLimit === 0 ? "Endless" : `${item.questionsLimit} Quests`}
+                            </td>
+                            <td style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{item.answered}</td>
+                            <td style={{ fontWeight: 'bold', color: 'var(--primary-hover)', fontSize: '0.85rem' }}>{item.score} pts</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
