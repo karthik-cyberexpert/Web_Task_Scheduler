@@ -546,7 +546,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [regexLives, setRegexLives] = useState(3);
   const [currentRegexQuestion, setCurrentRegexQuestion] = useState<RegexQuestion | null>(null);
   const [selectedRegexAnswer, setSelectedRegexAnswer] = useState<string | null>(null);
-  const [hoveredRegexAnswer, setHoveredRegexAnswer] = useState<string | null>(null);
   const [isCorrectRegexSelected, setIsCorrectRegexSelected] = useState<boolean | null>(null);
   const [isRegexActive, setIsRegexActive] = useState(false);
   const [isRegexLoading, setIsRegexLoading] = useState(false);
@@ -4909,11 +4908,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                           {/* Test Cases Panel */}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                              Interactive Test Suite (Hover choices to test!)
+                              Interactive Test Suite
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                               {currentRegexQuestion.testCases.map((tc, idx) => {
-                                const activePattern = selectedRegexAnswer || hoveredRegexAnswer;
+                                const activePattern = selectedRegexAnswer;
                                 let testStatus = "pending";
                                 if (activePattern) {
                                   try {
@@ -4976,8 +4975,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                   type="button"
                                   className={btnClass}
                                   onClick={() => handleRegexAnswerSelect(opt)}
-                                  onMouseEnter={() => setHoveredRegexAnswer(opt)}
-                                  onMouseLeave={() => setHoveredRegexAnswer(null)}
                                   disabled={selectedRegexAnswer !== null}
                                   style={{ fontFamily: 'monospace', fontSize: '0.9rem', wordBreak: 'break-all', padding: '1rem 0.75rem' }}
                                 >
